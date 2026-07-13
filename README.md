@@ -1,28 +1,17 @@
 <h1 align="center">
-  <span style="color:red; font-weight:bold; font-size:50px; 
-    animation: glow 2s ease-in-out infinite alternate;
-    text-shadow: 0 0 10px red, 0 0 20px red, 0 0 30px red;">
-    MOMO XMD
-  </span>
+  <img src="https://readme-typing-svg.herokuapp.com?font=Fira+Code&size=40&color=FF0000&duration=3000&pause=500&center=true&vCenter=true&width=500&lines=MOMO+XMD;SIMU+YAKO+SHERIA+ZANGU" alt="MOMO XMD" />
 </h1>
 
-<style>
-@keyframes glow {
-  from { text-shadow: 0 0 10px red, 0 0 20px red; }
-  to { text-shadow: 0 0 20px red, 0 0 30px red, 0 0 40px red; }
-}
-</style>
-
 <p align="center">
-  <img alt="MOMO XMD" height="350" src="https://i.ibb.co/nqsRcKDB/Xploader4.jpg">
+  <img alt="MOMO XMD" height="350" src="https://i.ibb.co/XRs4kL4r/momo-logo.png">
 </p>
 
 <p align="center">
-<a href="https://github.com/MOMO47"><img title="Author" src="https://img.shields.io/badge/Author-MOMO47-red?style=for-the-badge&logo=github"></a>
+  <a href="https://github.com/MOMO47"><img title="Author" src="https://img.shields.io/badge/Author-MOMO47-FF0000?style=for-the-badge&logo=github"></a>
 </p>
 
 <p align="center">
-  <b><i>"Simu yako, Sheria zangu"</i></b>
+  <b><font color="red">⚡ BOT YA KIZAZI KIPYA ⚡</font></b>
 </p>
 
 <p align="center">
