@@ -1,1 +1,24 @@
-
+{
+  "name": "MOMO-XMD",
+  "description": "MOMO XMD - Multi Device WhatsApp Bot",
+  "logo": "https://i.ibb.co/nqsRcKDB/Xploader4.jpg",
+  "repository": "https://github.com/MOMO47/MOMO-XMD",
+  "stack": "heroku-24",
+  "env": {
+    "SESSION_ID": {
+      "description": "Weka Session ID yako hapa: MOMO-XMD:~",
+      "value": "",
+      "required": true
+    },
+    "OWNER_NUMBER": {
+      "description": "Namba ya Mmiliki",
+      "value": "255760298574",
+      "required": true
+    },
+    "BOT_NAME": {
+      "value": "MOMO XMD",
+      "required": false
+    }
+  },
+  "buildpacks": [{ "url": "heroku/nodejs" }]
+}
