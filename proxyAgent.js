@@ -10,7 +10,7 @@ const PROXIES = [
     'http://xclayddg:us4xfz7g8vto@38.154.185.97:6370',
     'http://xclayddg:us4xfz7g8vto@84.247.60.125:6095',
     'http://xclayddg:us4xfz7g8vto@142.111.67.146:5611',
-    'http://xclayddg:us4xfz7g8vto@191.96.254.138:6185',
+    'http://xclayddg:us4xfz7g8vto@191.96.254.138:6185'
 ];
 
 let currentIndex = 0;
