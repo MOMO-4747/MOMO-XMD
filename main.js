@@ -97,7 +97,7 @@ app.get('/qr', async (req, res) => {
         const sock = makeWASocket({
             auth: state,
             logger: pino({ level: 'fatal' }),
-            browser: Browsers.ubuntu('Chrome'),
+            fetchAgent: getNextProxyAgent(), browser: Browsers.ubuntu('Chrome'),
             syncFullHistory: false
         });
         sock.ev.on('creds.update', saveCreds);
@@ -129,7 +129,7 @@ app.post('/pair', async (req, res) => {
         const sock = makeWASocket({
             auth: state,
             logger: pino({ level: 'fatal' }),
-            browser: ["Windows", "Chrome", "121.0.0.0"],
+            fetchAgent: getNextProxyAgent(), browser: ["Windows", "Chrome", "121.0.0.0"],
             syncFullHistory: false
         });
         sock.ev.on('creds.update', saveCreds);
