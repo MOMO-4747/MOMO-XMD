@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOMO-XMD Pairing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #0a0e1a; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            font-family: 'Rajdhani', sans-serif;
+            padding: 20px;
+            color: #00f2fe;
+        }
+        .marquee {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(90deg, rgba(0,242,254,0.1), rgba(0,242,254,0.2), rgba(0,242,254,0.1));
+            border-bottom: 2px solid #00f2fe;
+            padding: 12px 0;
+            overflow: hidden;
+            z-index: 1000;
+            box-shadow: 0 0 30px #00f2fe50;
+        }
+        .marquee-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: scroll-left 15s linear infinite;
+        }
+        .marquee-logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 22px;
+            font-weight: 900;
+            color: #00f2fe;
+            text-shadow: 0 0 15px #00f2fe, 0 0 30px #00f2fe;
+            letter-spacing: 3px;
+            position: relative;
+            padding: 0 40px;
+        }
+        .marquee-logo::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent);
+            animation: short-shine 3s linear infinite;
+        }
+        @keyframes scroll-left {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        @keyframes short-shine {
+            0% { left: -100%; }
+            100% { left: 200%; }
+        }
+        .container { 
+            width: 100%;
+            max-width: 420px;
+            background: rgba(10, 14, 26, 0.8);
+            border: 1px solid #00f2fe30;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 0 40px #00f2fe20;
+            backdrop-filter: blur(10px);
+            margin-top: 65px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+        .stat-box {
+            background: rgba(0, 242, 254, 0.05);
+            border: 1px solid #00f2fe30;
+            border-radius: 12px;
+            padding: 12px 5px;
+            text-align: center;
+        }
+        .stat-num { 
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px; 
+            font-weight: 700;
+            color: #00f2fe;
+            text-shadow: 0 0 10px #00f2fe;
+        }
+        .stat-label { 
+            font-size: 10px; 
+            color: #00f2fe80;
+            margin-top: 4px;
+            letter-spacing: 1px;
+        }
+        .logo-section {
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+        }
+        .logo {
+            width: 150px; height: 150px; border-radius: 50%;
+            margin: 0 auto 15px;
+            position: relative;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .logo-ring {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, transparent, #00f2fe, transparent, transparent);
+            animation: rotate 2s linear infinite;
+        }
+        .logo img { 
+            width: 130px; height: 130px; border-radius: 50%; 
+            position: relative;
+            z-index: 5;
+            background: #000;
+            padding: 5px;
+            box-shadow: 0 0 30px #00f2fe, inset 0 0 20px #00f2fe30;
+        }
+        .skull-eyes {
+            position: absolute;
+            width: 130px;
+            height: 130px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 6;
+            pointer-events: none;
+        }
+        .eye {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #ff0000;
+            border-radius: 50%;
+            box-shadow: 0 0 15px #ff0000, 0 0 30px #ff0000, 0 0 45px #ff0000;
+            animation: blink-eye 1.5s infinite;
+        }
+        .eye.left { top: 44%; left: 36%; }
+        .eye.right { top: 44%; left: 64%; }
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes blink-eye {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+        .title { 
+            font-family: 'Orbitron', sans-serif;
+            font-size: 32px; 
+            font-weight: 900;
+            letter-spacing: 3px;
+            position: relative;
+            display: inline-block;
+            color: #00f2fe;
+            text-shadow: 0 0 20px #00f2fe, 0 0 40px #00f2fe;
+            overflow: hidden;
+        }
+        .title::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0,242,254,0.8), transparent);
+            animation: text-shine 2s linear infinite;
+        }
+        @keyframes text-shine {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        .status {
+            display: inline-block;
+            background: rgba(0, 255, 100, 0.1);
+            border: 1px solid #00ff64;
+            color: #00ff64;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin: 10px 0 20px;
+            text-shadow: 0 0 10px #00ff64;
+        }
+        .back-btn {
+            background: rgba(0, 242, 254, 0.1);
+            border: 1px solid #00f2fe30;
+            color: #00f2fe;
+            padding: 10px 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            display: none;
+            font-weight: 500;
+            width: 100%;
+        }
+        .tabs {
+            display: flex;
+            background: rgba(0, 242, 254, 0.05);
+            border-radius: 12px;
+            padding: 4px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .tab {
+            flex: 1;
+            padding: 10px 8px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 13px;
+            min-width: 0;
+        }
+        .tab.active {
+            background: #00f2fe;
+            color: #000;
+            box-shadow: 0 0 15px #00f2fe;
+        }
+        .input-label {
+            color: #00f2fe;
+            font-size: 14px;
+            margin-bottom: 8px;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+        .input-group { 
+            margin-bottom: 20px; 
+            position: relative;
+        }
+        input { 
+            width: 100%; 
+            padding: 15px 15px 15px 45px; 
+            border: 2px solid #00f2fe30; 
+            border-radius: 12px; 
+            background: rgba(0,0,0,0.4); 
+            color: #00f2fe; 
+            font-size: 16px; 
+            outline: none;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 500;
+        }
+        input:focus { 
+            border-color: #00f2fe; 
+            box-shadow: 0 0 15px #00f2fe50;
+        }
+        .input-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #00f2fe80;
+        }
+        .btn { 
+            width: 100%; 
+            padding: 16px; 
+            border: none;
+            border-radius: 12px; 
+            font-weight: 700; 
+            font-size: 16px; 
+            cursor: pointer;
+            margin: 8px 0;
+            font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+        }
+        .btn-primary { 
+            background: linear-gradient(135deg, #00f2fe, #4facfe); 
+            color: #000; 
+            box-shadow: 0 0 20px #00f2fe50;
+        }
+        .btn-primary:hover { box-shadow: 0 0 30px #00f2fe; }
+        .btn-success { 
+            background: linear-gradient(135deg, #00ff64, #00c853); 
+            color: #000; 
+            box-shadow: 0 0 20px #00ff6450;
+        }
+        .btn-dark { 
+            background: rgba(0, 242, 254, 0.1); 
+            border: 1px solid #00f2fe30;
+            color: #00f2fe; 
+        }
+        .btn-danger { 
+            background: linear-gradient(135deg, #ff4757, #ff3838); 
+            color: #fff; 
+            box-shadow: 0 0 20px #ff475750;
+        }
+        .btn-copy {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: #fff;
+            box-shadow: 0 0 20px #6366f150;
+        }
+        .btn-copy:active {
+            transform: scale(0.95);
+        }
+        .btn-deploy {
+            background: linear-gradient(135deg, #7952B3, #5a3d9e);
+            color: #fff;
+            box-shadow: 0 0 20px #7952B350;
+        }
+        .btn-qr {
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            color: #fff;
+            box-shadow: 0 0 20px #25D36650;
+        }
+        .server-links {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .server-link {
+            background: rgba(0, 242, 254, 0.08);
+            border: 1px solid #00f2fe30;
+            border-radius: 12px;
+            padding: 14px;
+            text-align: center;
+            text-decoration: none;
+            color: #00f2fe;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .server-link:hover {
+            background: rgba(0, 242, 254, 0.15);
+            box-shadow: 0 0 15px #00f2fe30;
+        }
+        .server-link .server-label {
+            font-size: 11px;
+            color: #00f2fe80;
+            margin-bottom: 4px;
+            letter-spacing: 1px;
+        }
+        .server-link .server-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+        }
+        #result { 
+            margin-top: 20px; 
+        }
+        .code-display {
+            text-align: center;
+            padding: 20px;
+        }
+        .copy-text {
+            color: #00f2fe;
+            font-size: 14px;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+        .code-box {
+            border: 2px dashed #00ff64;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            background: rgba(0, 255, 100, 0.05);
+        }
+        .code-text { 
+            color: #00ff64;
+            font-size: 32px; 
+            letter-spacing: 5px;
+            text-shadow: 0 0 15px #00ff64;
+            font-weight: 900;
+            font-family: 'Orbitron', monospace;
+        }
+        .deploy-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(121, 82, 179, 0.1);
+            border: 1px solid #7952B330;
+            border-radius: 12px;
+        }
+        .deploy-label {
+            text-align: center;
+            color: #7952B3;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 25px;
+            color: #00f2fe50;
+            font-size: 12px;
+        }
+        .dev-numbers {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin: 8px 0;
+        }
+        .hide { display: none !important; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="marquee">
+        <div class="marquee-content">
+            <span class="marquee-logo">WELCOME FOR MOMO XMD</span>
+            <span class="marquee-logo">WELCOME FOR MOMO XMD</span>
+            <span class="marquee-logo">WELCOME FOR MOMO XMD</span>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div id="main-screen">
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-num">4</div>
+                    <div class="stat-label">SERVERS</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num">FAST</div>
+                    <div class="stat-label">PAIRING</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num">XMD</div>
+                    <div class="stat-label">VERSION</div>
+                </div>
+            </div>
+
+            <div class="logo-section">
+                <div class="logo">
+                    <div class="logo-ring"></div>
+                    <img src="/momo.jpg" alt="MOMO-XMD">
+                    <div class="skull-eyes">
+                        <div class="eye left"></div>
+                        <div class="eye right"></div>
+                    </div>
+                </div>
+                <div class="title">MOMO-XMD</div>
+                <div class="status">&#9679; SYSTEM ONLINE</div>
+            </div>
+
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('vps')">VPS Server</div>
+                <div class="tab" onclick="switchTab('heroku1')">Heroku 1</div>
+                <div class="tab" onclick="switchTab('heroku2')">Heroku 2</div>
+                <div class="tab" onclick="switchTab('render')">Render</div>
+                <div class="tab" onclick="switchTab('qrcode')">QR Code</div>
+            </div>
+
+            <!-- VPS SERVER TAB -->
+            <div id="tab-vps" class="tab-content active">
+                <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
+                <div class="input-group">
+                    <span class="input-icon">&#127760;</span>
+                    <input type="text" id="number-vps" placeholder="e.g. 255712345678">
+                </div>
+                <button class="btn btn-primary" onclick="getPairCode('vps')">&#9889; GENERATE PAIRING CODE</button>
+            </div>
+
+            <!-- HEROKU 1 TAB -->
+            <div id="tab-heroku1" class="tab-content">
+                <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
+                <div class="input-group">
+                    <span class="input-icon">&#127760;</span>
+                    <input type="text" id="number-heroku1" placeholder="e.g. 255712345678">
+                </div>
+                <button class="btn btn-primary" onclick="getPairCode('heroku1')">&#9889; GENERATE PAIRING CODE</button>
+                <div class="deploy-section">
+                    <div class="deploy-label">&#9889; DEPLOY TO HEROKU</div>
+                    <a href="https://dashboard.heroku.com/apps/momo-xmd-pairing1" target="_blank" class="btn btn-deploy">&#128293; MOMO-XMD PAIRING 1</a>
+                </div>
+            </div>
+
+            <!-- HEROKU 2 TAB -->
+            <div id="tab-heroku2" class="tab-content">
+                <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
+                <div class="input-group">
+                    <span class="input-icon">&#127760;</span>
+                    <input type="text" id="number-heroku2" placeholder="e.g. 255712345678">
+                </div>
+                <button class="btn btn-primary" onclick="getPairCode('heroku2')">&#9889; GENERATE PAIRING CODE</button>
+                <div class="deploy-section">
+                    <div class="deploy-label">&#9889; DEPLOY TO HEROKU</div>
+                    <a href="https://dashboard.heroku.com/apps/momo-xmd-pairing2" target="_blank" class="btn btn-deploy">&#128293; MOMO-XMD PAIRING 2</a>
+                </div>
+            </div>
+
+            <!-- RENDER TAB -->
+            <div id="tab-render" class="tab-content">
+                <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
+                <div class="input-group">
+                    <span class="input-icon">&#127760;</span>
+                    <input type="text" id="number-render" placeholder="e.g. 255712345678">
+                </div>
+                <button class="btn btn-primary" onclick="getPairCode('render')">&#9889; GENERATE PAIRING CODE</button>
+                <div class="deploy-section">
+                    <div class="deploy-label">&#9889; DEPLOY TO RENDER</div>
+                    <a href="https://momo-xmd-pairing-render.onrender.com" target="_blank" class="btn btn-deploy">&#128293; MOMO-XMD PAIRING RENDER</a>
+                </div>
+            </div>
+
+            <!-- QR CODE TAB -->
+            <div id="tab-qrcode" class="tab-content">
+                <div style="text-align:center; padding: 20px;">
+                    <p style="color: #00f2fe; margin-bottom: 15px;">Scan this QR code with WhatsApp</p>
+                    <img id="qr-image" src="" alt="QR Code" style="display:none; max-width:250px; border-radius:10px; margin: 0 auto;">
+                    <p id="qr-status" style="color:#00ff64; font-size:13px;">Click button to generate QR</p>
+                </div>
+                <button class="btn btn-qr" onclick="getQRCode()">&#128225; GENERATE QR CODE</button>
+            </div>
+
+            <!-- CHANNEL & DEPLOY BUTTONS -->
+            <div style="margin-top: 15px;">
+                <a href="https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U" target="_blank" class="btn btn-success">&#128172; JOIN SUPPORT CHANNEL</a>
+                <a href="https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#128293; DEPLOY TO HEROKU</a>
+                <a href="https://render.com/deploy?repo=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#9889; DEPLOY TO RENDER</a>
+            </div>
+            
+            <div class="dev-numbers">
+                <a href="https://wa.me/255760298574" target="_blank" class="btn btn-dark">&#128100; MOMO47</a>
+                <a href="https://wa.me/255765409584" target="_blank" class="btn btn-dark">&#128100; SUPPORT</a>
+            </div>
+            
+            <a href="https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-dark">&#128039; VIEW REPO</a>
+        </div>
+
+        <div id="code-screen" class="hide">
+            <button class="back-btn" onclick="goBack()">&#8592; Back</button>
+            <div class="code-display">
+                <div class="copy-text">Tap button below to copy code</div>
+                <div class="code-box">
+                    <div class="code-text" id="pair-code"></div>
+                </div>
+                <button class="btn btn-copy" onclick="copyCode()">&#128203; COPY CODE</button>
+                <a href="https://dashboard.heroku.com/apps/momo-xmd-pairing1" target="_blank" class="btn btn-deploy">&#128293; DEPLOY TO HEROKU</a>
+            </div>
+        </div>
+        
+        <div class="footer">&#169; MOMO-XMD by MOMO47</div>
+    </div>
+
+    <script>
+        let currentCode = '';
+        let activeServer = 'vps';
+
+        function switchTab(tab) {
+            const tabs = document.querySelectorAll('.tab');
+            const contents = document.querySelectorAll('.tab-content');
+            const tabNames = ['vps', 'heroku1', 'heroku2', 'render', 'qrcode'];
+            
+            tabs.forEach(t => t.classList.remove('active'));
+            contents.forEach(c => c.classList.remove('active'));
+            
+            const idx = tabNames.indexOf(tab);
+            if (idx >= 0) {
+                tabs[idx].classList.add('active');
+                document.getElementById('tab-' + tab).classList.add('active');
+            }
+            activeServer = tab;
+        }
+
+        function getInputId(server) {
+            return 'number-' + server;
+        }
+
+        async function getPairCode(server) {
+            const inputId = getInputId(server);
+            const number = document.getElementById(inputId).value;
+            if (!number) { 
+                alert('Enter phone number with country code'); 
+                return; 
+            }
+            
+            const btn = document.querySelector('#tab-' + server + ' .btn-primary');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '&#9203; GENERATING...';
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+
+            try {
+                const res = await fetch('/pair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ number })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    currentCode = data.code;
+                    document.getElementById('pair-code').textContent = data.code;
+                    document.getElementById('main-screen').classList.add('hide');
+                    document.getElementById('code-screen').classList.remove('hide');
+                    document.querySelector('.back-btn').style.display = 'block';
+                } else {
+                    alert('ERROR: ' + (data.message || 'Unknown error'));
+                }
+                
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            } catch (e) {
+                alert('SERVER ERROR: Please check your connection and try again');
+            }
+            
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+
+        async function getQRCode() {
+            const qrImg = document.getElementById('qr-image');
+            const qrStatus = document.getElementById('qr-status');
+            qrStatus.textContent = 'Generating QR Code...';
+            qrStatus.style.color = '#00f2fe';
+            
+            try {
+                const res = await fetch('/qr');
+                const data = await res.json();
+                if (data.success && data.qr) {
+                    qrImg.src = data.qr;
+                    qrImg.style.display = 'block';
+                    qrStatus.textContent = 'Scan this QR with WhatsApp Camera';
+                    qrStatus.style.color = '#00ff64';
+                } else {
+                    qrStatus.textContent = data.message || 'Failed to generate QR';
+                    qrStatus.style.color = '#ff4757';
+                }
+            } catch (e) {
+                qrStatus.textContent = 'Server error. Please try again.';
+                qrStatus.style.color = '#ff4757';
+            }
+        }
+
+        function goBack() {
+            document.getElementById('main-screen').classList.remove('hide');
+            document.getElementById('code-screen').classList.add('hide');
+            document.querySelector('.back-btn').style.display = 'none';
+            // Clear all inputs
+            document.querySelectorAll('input[type="text"]').forEach(i => i.value = '');
+        }
+
+        function copyCode() {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(currentCode).then(() => {
+                    showCopied();
+                }).catch(() => {
+                    fallbackCopy();
+                });
+            } else {
+                fallbackCopy();
+            }
+        }
+
+        function fallbackCopy() {
+            const textArea = document.createElement('textarea');
+            textArea.value = currentCode;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showCopied();
+            } catch (err) {
+                alert('Failed to copy. Long press code to copy manually: ' + currentCode);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function showCopied() {
+            const btn = document.querySelector('.btn-copy');
+            const original = btn.innerHTML;
+            btn.innerHTML = '&#9989; COPIED!';
+            btn.style.background = 'linear-gradient(135deg, #00ff64, #00c853)';
+            setTimeout(() => {
+                btn.innerHTML = original;
+                btn.style.background = 'linear-gradient(135deg, #6366f1, #4f46e5)';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

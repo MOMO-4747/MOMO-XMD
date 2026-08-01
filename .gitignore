@@ -1,0 +1,27 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+
+# Auth directories (never push credentials to GitHub)
+auth_info/
+auth_info_pairing/
+auth_info_qr/
+auth_pairing_temp*
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Store and database (generated at runtime)
+lib/store.json
+lib/database.json

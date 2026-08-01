@@ -1,0 +1,46 @@
+{
+  "name": "MOMO-XMD",
+  "description": "MOMO XMD WhatsApp Bot by MOMO47",
+  "repository": "https://github.com/MOMO-4747/MOMO-XMD",
+  "logo": "https://raw.githubusercontent.com/MOMO-4747/MOMO-XMD/main/media/momo.jpg",
+  "keywords": ["whatsapp", "bot", "momo-xmd", "baileys"],
+  "success_url": "/",
+  "env": {
+    "SESSION_ID": {
+      "description": "Paste your SESSION_ID from pairing server here",
+      "required": true
+    },
+    "OWNER_NUMBER": {
+      "description": "Owner phone number (e.g. 255760298574)",
+      "required": false,
+      "value": "255760298574"
+    },
+    "MODE": {
+      "description": "Bot mode: private or public",
+      "required": false,
+      "value": "private"
+    },
+    "PREFIX": {
+      "description": "Bot prefix (default: .)",
+      "required": false,
+      "value": "."
+    },
+    "CHANNEL_LINK": {
+      "description": "WhatsApp Channel link",
+      "required": false,
+      "value": "https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "free"
+    }
+  },
+  "addons": [],
+  "buildpacks": [
+    {
+      "url": "https://github.com/heroku/heroku-buildpack-nodejs"
+    }
+  ]
+}
