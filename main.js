@@ -49,16 +49,18 @@ app.get('/qr', async (req, res) => {
                 res.json({ success: true, qr: qrImage });
             }
             if (connection === 'open') {
-                const credsData = fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8');
-                const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`;
-                if (sock.user) {
-                    await sock.sendMessage(sock.user.id, { text: sessionId });
-                }
+                try {
+                    if (fs.existsSync(path.join(authDir, 'creds.json'))) {
+                        const credsData = fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8');
+                        const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`;
+                        if (sock.user) {
+                            await sock.sendMessage(sock.user.id, { text: sessionId });
+                        }
+                        console.log('[QR SUCCESS] Session ID sent');
+                    }
+                } catch (e) { console.error('[QR ERROR]', e.message); }
                 setTimeout(() => { 
-                    try { 
-                        sock.end(); 
-                        fs.rmSync(authDir, { recursive: true, force: true }); 
-                    } catch (e) {} 
+                    try { sock.end(); fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {} 
                 }, 5000);
             }
         });
@@ -66,7 +68,7 @@ app.get('/qr', async (req, res) => {
     } catch (e) { if (!res.headersSent) res.status(500).json({ success: false, error: e.message }); }
 });
 
-// PAIRING CODE ENDPOINT - FIXED VERSION
+// PAIRING CODE ENDPOINT - FIXED: Wait for WhatsApp to process
 app.post('/pair', async (req, res) => {
     const { number } = req.body;
     
@@ -79,8 +81,7 @@ app.post('/pair', async (req, res) => {
     if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
     
     let sock = null;
-    let pairingDone = false;
-    let pairingTimeout = null;
+    let sessionDelivered = false;
     
     try {
         const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -93,21 +94,27 @@ app.post('/pair', async (req, res) => {
             fetchAgent: getNextProxyAgent(),
             browser: ["Windows", "Chrome", "121.0.0.0"],
             syncFullHistory: false,
-            connectTimeoutMs: 20000
+            connectTimeoutMs: 20000,
+            keepAliveIntervalMs: 30000
         });
         
         sock.ev.on('creds.update', saveCreds);
         
+        // Track connection state
         sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect } = update;
+            const { connection, lastDisconnect, qr, isNewLogin } = update;
             
-            // When connection opens, send session ID
-            if (connection === 'open' && !pairingDone) {
-                pairingDone = true;
-                clearTimeout(pairingTimeout);
+            console.log(`[CONNECTION] ${cleanNumber}: connection=${connection}, isNewLogin=${isNewLogin}`);
+            
+            // When fully paired and connected
+            if (connection === 'open') {
+                if (sessionDelivered) return;
+                sessionDelivered = true;
                 
-                // Wait for creds to be saved before reading
-                await delay(1000);
+                console.log(`[CONNECTED] ${cleanNumber} is now connected!`);
+                
+                // Wait for creds to be saved
+                await delay(2000);
                 
                 try {
                     if (fs.existsSync(path.join(authDir, 'creds.json'))) {
@@ -115,67 +122,64 @@ app.post('/pair', async (req, res) => {
                         const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`;
                         if (sock.user) {
                             await sock.sendMessage(sock.user.id, { text: sessionId });
+                            console.log(`[SESSION SENT] Session ID delivered to ${sock.user.id}`);
                         }
-                        console.log(`[PAIRING SUCCESS] Session sent for ${cleanNumber}`);
                     }
                 } catch (e) {
-                    console.error(`[PAIRING ERROR] Failed to send session: ${e.message}`);
+                    console.error(`[SESSION ERROR] ${e.message}`);
                 }
                 
-                // Clean up after sending
+                // Keep alive for 10 seconds then clean up
                 setTimeout(() => { 
                     try { 
                         if (sock) sock.end(); 
                         fs.rmSync(authDir, { recursive: true, force: true }); 
+                        console.log(`[CLEANUP] ${cleanNumber} session complete`);
                     } catch (e) {} 
-                }, 5000);
+                }, 10000);
             }
             
-            // Handle connection close (Error 408)
-            if (connection === 'close' && !pairingDone) {
+            // Handle disconnection
+            if (connection === 'close') {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                console.log(`[CONNECTION CLOSED] ${cleanNumber} - Status: ${statusCode}`);
+                console.log(`[DISCONNECT] ${cleanNumber}: statusCode=${statusCode}`);
                 
-                // If it's Error 405 or 408, the pairing code was already generated
-                // The code itself IS the pairing token - no need to reconnect
+                // Error 408 = WhatsApp rejected the initial connection
+                // This is NORMAL for pairing code - the code is generated
+                // WhatsApp will process it when user enters it on phone
                 if (statusCode === 405 || statusCode === 408) {
-                    // Pairing code was already sent to client
-                    // WhatsApp will process the pairing code on the phone
-                    console.log(`[INFO] Pairing code was generated for ${cleanNumber}. User should enter it on WhatsApp.`);
-                    clearTimeout(pairingTimeout);
+                    console.log(`[INFO] ${cleanNumber}: Pairing code was sent. User should enter it on WhatsApp now.`);
+                    // Don't retry - let WhatsApp process the code
+                } else if (statusCode !== 428) {
+                    // 428 = Normal logout, other codes = retry
+                    console.log(`[ERROR] ${cleanNumber}: Unexpected disconnect ${statusCode}`);
                 }
-                
-                // Don't retry - the pairing code is already generated and valid
-                // WhatsApp processes the code asynchronously
             }
         });
         
-        // Wait for socket to be ready, then request pairing code
+        // Wait for socket to initialize
         await delay(3000);
         
-        // Set timeout in case pairing takes too long
-        pairingTimeout = setTimeout(() => {
-            if (!pairingDone && !res.headersSent) {
-                pairingDone = true;
-                res.status(500).json({ success: false, message: 'Pairing timeout' });
-                try { sock.end(); } catch (e) {}
-                try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
-            }
-        }, 30000);
-        
+        // Generate pairing code
         const code = await sock.requestPairingCode(cleanNumber);
         console.log(`[PAIRING CODE] ${cleanNumber}: ${code}`);
         
-        if (!res.headersSent) {
-            res.json({ success: true, code: code });
-        }
+        // Send response immediately with the code
+        res.json({ success: true, code: code });
         
-        // Keep socket alive for a bit to allow WhatsApp to process the pairing
-        // Don't close immediately - let the connection.update handler deal with it
+        // Keep socket alive for 120 seconds to allow WhatsApp to process pairing
+        // DO NOT close the socket - WhatsApp needs time to process the pairing code
+        await delay(120000);
+        
+        // After 2 minutes, close the socket
+        try { 
+            if (sock) sock.end(); 
+            fs.rmSync(authDir, { recursive: true, force: true }); 
+            console.log(`[TIMEOUT] ${cleanNumber}: Socket closed after 120s`);
+        } catch (e) {}
         
     } catch (e) {
         console.error(`[PAIRING ERROR] ${cleanNumber}: ${e.message}`);
-        clearTimeout(pairingTimeout);
         if (!res.headersSent) {
             res.status(500).json({ success: false, error: e.message });
         }
