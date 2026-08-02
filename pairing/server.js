@@ -92,7 +92,8 @@ app.post('/pair', async (req, res) => {
                 
                 try {
                     // Send session info to user
-                    const sessionId = `MOMO-XMD×${sock.user.id}`
+                    const credsData = fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8');
+                    const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`;
                     await sock.sendMessage(sock.user.id, {
                         text: `*✅ MOMO-XMD Connected!*\n\n` +
                               `📱 Session ID:\n${sessionId}\n\n` +
@@ -126,11 +127,9 @@ app.post('/pair', async (req, res) => {
         })
 
         // Wait for socket to be ready, then request pairing code
-        // Use connection.update to know when ready
         const pairCode = await new Promise((resolve, reject) => {
             let resolved = false
 
-            // Set timeout
             const timeout = setTimeout(() => {
                 if (!resolved) {
                     resolved = true
@@ -139,19 +138,14 @@ app.post('/pair', async (req, res) => {
                 }
             }, 30000)
 
-            // Listen for connection to be ready
             sock.ev.on('connection.update', async (update) => {
                 if (resolved) return
-
                 if (update.connection === 'connecting' || update.qr) {
                     try {
-                        // Now request the REAL pairing code from WhatsApp
                         const code = await sock.requestPairingCode(cleanNumber)
-                        
                         if (!resolved) {
                             resolved = true
                             clearTimeout(timeout)
-                            console.log(`[PAIRING] Real pairing code for ${cleanNumber}: ${code}`)
                             resolve(code)
                         }
                     } catch (err) {
@@ -165,13 +159,6 @@ app.post('/pair', async (req, res) => {
                 }
             })
         })
-
-        // Clean up auth directory
-        setTimeout(() => {
-            if (fs.existsSync(authDir)) {
-                fs.rmSync(authDir, { recursive: true, force: true })
-            }
-        }, 5000)
 
         return res.json({
             success: true,
@@ -236,11 +223,13 @@ app.get('/qr', async (req, res) => {
                         res.send(qr)
                     }
                 }
-                // Don't end immediately - keep alive for scan
             }
 
             if (connection === 'open') {
                 console.log('[QR] Connected!')
+                const credsData = fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8');
+                const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`;
+                await sock.sendMessage(sock.user.id, { text: sessionId });
                 sock.end(new Error('QR scan completed'))
                 setTimeout(() => {
                     if (fs.existsSync(authDir)) {
@@ -257,7 +246,6 @@ app.get('/qr', async (req, res) => {
             }
         })
 
-        // Timeout after 60 seconds
         setTimeout(() => {
             if (!res.headersSent) {
                 res.json({ success: false, message: 'QR expired. Please try again.' })
@@ -303,14 +291,5 @@ process.on('unhandledRejection', (err) => {
 })
 
 app.listen(PORT, () => {
-    console.log(`\n╔══════════════════════════════════════════╗`)
-    console.log(`║      MOMO-XMD PAIRING SERVER           ║`)
-    console.log(`║         Version: 1.9.9                 ║`)
-    console.log(`║         Port: ${PORT}                    ║`)
-    console.log(`║      By: MOMO47 (255760298574)         ║`)
-    console.log(`╚══════════════════════════════════════════╝\n`)
-    console.log(`📌 Pairing: POST /pair { "number": "255XXXXXXXXX" }`)
-    console.log(`📌 QR Code: GET /qr`)
-    console.log(`📌 Status:  GET /status`)
-    console.log(`📌 Health:  GET /health`)
+    console.log(`MOMO-XMD Pairing Server running on port ${PORT}`);
 })
