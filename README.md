@@ -38,9 +38,9 @@
 
 | **Method** | **Button** |
 | --- | --- |
-| **MOMO-XMD SERVER 1** | [![MOMO-XMD SERVER 1](https://img.shields.io/badge/MOMO--XMD_SERVER_1-000033?style=for-the-badge&logo=whatsapp&logoColor=white)](https://dashboard.heroku.com/apps/momo-xmd-pairing1) |
-| **MOMO-XMD SERVER 2** | [![MOMO-XMD SERVER 2](https://img.shields.io/badge/MOMO--XMD_SERVER_2-000033?style=for-the-badge&logo=whatsapp&logoColor=white)](https://dashboard.heroku.com/apps/momo-xmd-pairing2) |
-| **RENDER SERVER** | [![RENDER SERVER](https://img.shields.io/badge/RENDER_SERVER-0099FF?style=for-the-badge&logo=render&logoColor=white)](https://momo-xmd-pairing-render.onrender.com) |
+| **MOMO-XMD SERVER 1** | [![MOMO-XMD SERVER 1](https://img.shields.io/badge/MOMO--XMD_SERVER_1-7952B3?style=for-the-badge&logo=heroku&logoColor=white)](https://momo-xmd-pairing-fa35bd7082ba.herokuapp.com/) |
+| **MOMO-XMD SERVER 2** | [![MOMO-XMD SERVER 2](https://img.shields.io/badge/MOMO--XMD_SERVER_2-0099FF?style=for-the-badge&logo=render&logoColor=white)](https://momo-xmd-pairing-render.onrender.com) |
+| **MOMO-XMD SERVER 3** | [![MOMO-XMD SERVER 3](https://img.shields.io/badge/MOMO--XMD_SERVER_3-000033?style=for-the-badge&logo=whatsapp&logoColor=white)](https://pair.momo-xmd.xyz) |
 | **SCAN QR CODE** | [![SCAN QR CODE](https://img.shields.io/badge/SCAN_QR_CODE-000033?style=for-the-badge&logo=whatsapp&logoColor=white)](http://212.224.86.233:8000/qr) |
 
 > **Note:** After pairing on any server, you will receive a `SESSION_ID` starting with `MOMO-XMD`. Copy it and paste it in your Heroku/Render Config Vars as `SESSION_ID`.
