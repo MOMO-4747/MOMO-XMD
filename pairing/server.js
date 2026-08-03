@@ -18,6 +18,9 @@ const PORT = process.env.PORT || 3000
 // Cache for retry counters
 const msgRetryCounterCache = new NodeCache()
 
+// In-memory session storage for polling
+const sessions = new Map()
+
 // Mutex to queue requests (prevent multiple sessions at once)
 const mutex = new Mutex()
 
@@ -27,6 +30,32 @@ app.use(express.static(path.join(__dirname, 'public')))
 // ===== LOGO PAGE =====
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'))
+})
+
+// ===== SESSION STATUS ENDPOINT (POLLING) =====
+app.get('/session-status/:key', (req, res) => {
+    const key = req.params.key
+    const session = sessions.get(key)
+
+    if (!session) {
+        return res.json({ success: false, status: 'waiting', message: 'Waiting for connection...' })
+    }
+
+    if (session.error) {
+        return res.json({ success: false, status: 'error', message: session.error })
+    }
+
+    if (session.sessionId) {
+        return res.json({ 
+            success: true, 
+            status: 'connected', 
+            sessionReady: true,
+            sessionId: session.sessionId,
+            message: 'Connected successfully! Session ID generated.' 
+        })
+    }
+
+    return res.json({ success: false, status: 'waiting', message: 'Waiting for connection...' })
 })
 
 // ===== PAIRING CODE ENDPOINT =====
@@ -53,6 +82,10 @@ app.post('/pair', async (req, res) => {
     // Acquire mutex to prevent concurrent sessions
     const release = await mutex.acquire()
     
+    // Unique key for this pairing attempt
+    const sessionKey = 'momo_' + Date.now() + '_' + Math.floor(Math.random() * 1000)
+    sessions.set(sessionKey, { status: 'starting', number: cleanNumber })
+
     try {
         // Create temporary auth directory with unique name
         const authDir = path.join(__dirname, 'auth_info_' + Date.now())
@@ -64,7 +97,7 @@ app.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
-        // Create socket - try connecting directly without proxy
+        // Create socket
         const sock = makeWASocket({
             version,
             auth: {
@@ -77,7 +110,7 @@ app.post('/pair', async (req, res) => {
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             syncFullHistory: false,
-            connectTimeoutMs: 30000,
+            connectTimeoutMs: 60000,
             retryRequestDelayMs: 2000,
             maxMsgRetryCount: 5
         })
@@ -93,7 +126,7 @@ app.post('/pair', async (req, res) => {
 
         // Listen for connection updates
         sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr } = update
+            const { connection, lastDisconnect } = update
 
             if (connection === 'open') {
                 console.log('[PAIRING] Connected successfully!')
@@ -101,40 +134,49 @@ app.post('/pair', async (req, res) => {
                 try {
                     // Save credentials
                     await saveCreds()
-                    await new Promise(r => setTimeout(r, 2000))
+                    await new Promise(r => setTimeout(r, 3000))
                     
                     const credsFile = path.join(authDir, 'creds.json')
                     if (fs.existsSync(credsFile)) {
                         const credsData = fs.readFileSync(credsFile, 'utf-8')
                         const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`
-                        await sock.sendMessage(sock.user.id, {
+                        
+                        // Update session storage for polling
+                        sessions.set(sessionKey, { status: 'connected', sessionId: sessionId })
+
+                        // Send message to the user
+                        const userId = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
+                        await sock.sendMessage(userId, {
                             text: `*MOMO-XMD Connected!*\n\n` +
-                                  `Your SESSION_ID:\n${sessionId}\n\n` +
-                                  `Channel: https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H`
+                                  `*Your SESSION_ID:*\n\n${sessionId}\n\n` +
+                                  `_Copy this ID and use it in your deployment._\n\n` +
+                                  `*Support Channel:* https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H`
                         })
+                        console.log('[PAIRING] Session ID sent to WhatsApp')
                     }
                 } catch (e) {
                     console.error('[PAIRING] Error sending message:', e.message)
                 }
 
-                // Wait then end
+                // Keep alive for a bit to ensure message is sent and then end
                 setTimeout(() => {
-                    try { sock.end(new Error('Session completed')) } catch (e) {}
+                    try { sock.end(undefined) } catch (e) {}
                     // Clean up after delay
                     setTimeout(() => {
                         if (fs.existsSync(authDir)) {
                             try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
                         }
-                    }, 5000)
-                }, 5000)
+                    }, 10000)
+                }, 10000)
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
                 console.log('[PAIRING] Connection closed, reason:', reason)
                 
-                if (reason !== 408 && reason !== 428) {
-                    try { sock.end(undefined) } catch (e) {}
+                // If it wasn't a normal closure, it might be an error
+                if (reason !== 408 && reason !== 428 && reason !== 200) {
+                    // Could be logged out or something else
                 }
             }
         })
@@ -173,24 +215,16 @@ app.post('/pair', async (req, res) => {
             })
         })
 
-        // Generate proper SESSION_ID with base64 encoded pairing data
-        const sessionData = JSON.stringify({
-            pairingCode: pairCode,
-            phoneNumber: cleanNumber,
-            timestamp: Date.now(),
-            bot: 'MOMO-XMD'
-        })
-        const sessionId = `MOMO-XMD~${Buffer.from(sessionData).toString('base64')}`
-
         return res.json({
             success: true,
             code: pairCode,
-            sessionId: sessionId,
+            sessionKey: sessionKey,
             message: 'Pairing code generated successfully! Enter this code in WhatsApp.'
         })
 
     } catch (error) {
         console.error('[PAIRING] Error:', error.message)
+        sessions.set(sessionKey, { status: 'error', error: error.message })
         return res.status(500).json({
             success: false,
             message: 'Failed to generate pairing code. Please try again.',
@@ -252,20 +286,21 @@ app.get('/qr', async (req, res) => {
                 console.log('[QR] Connected!')
                 try {
                     await saveCreds()
-                    await new Promise(r => setTimeout(r, 2000))
+                    await new Promise(r => setTimeout(r, 3000))
                     const credsFile = path.join(authDir, 'creds.json')
                     if (fs.existsSync(credsFile)) {
                         const credsData = fs.readFileSync(credsFile, 'utf-8')
                         const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`
-                        await sock.sendMessage(sock.user.id, { text: sessionId })
+                        const userId = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
+                        await sock.sendMessage(userId, { text: `*MOMO-XMD Connected!*\n\nSession ID: ${sessionId}` })
                     }
                 } catch (e) {}
-                try { sock.end(new Error('QR scan completed')) } catch (e) {}
+                try { sock.end(undefined) } catch (e) {}
                 setTimeout(() => {
                     if (fs.existsSync(authDir)) {
                         try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
                     }
-                }, 3000)
+                }, 10000)
             }
 
             if (connection === 'close') {
@@ -308,6 +343,16 @@ app.get('/status', (req, res) => {
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', bot: 'MOMO-XMD', version: '2.7.0' })
 })
+
+// Clean up sessions map every hour
+setInterval(() => {
+    const oneHourAgo = Date.now() - 3600000
+    for (const [key, value] of sessions.entries()) {
+        if (value.timestamp < oneHourAgo) {
+            sessions.delete(key)
+        }
+    }
+}, 3600000)
 
 // Handle EPIPE errors
 process.on('uncaughtException', (err) => {
