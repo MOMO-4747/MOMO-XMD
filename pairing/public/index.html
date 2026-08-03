@@ -443,9 +443,48 @@
         .how-to strong {
             color: #00f2fe;
         }
+        /* Loading spinner */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+        }
+        .loading-overlay.show { display: flex; }
+        .spinner {
+            width: 60px; height: 60px;
+            border: 4px solid #00f2fe30;
+            border-top: 4px solid #00f2fe;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-text {
+            color: #00f2fe;
+            margin-top: 15px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .number-display {
+            color: #00f2fe80;
+            font-size: 12px;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">Generating pairing code...</div>
+    </div>
+
     <div class="marquee">
         <div class="marquee-content">
             <span class="marquee-logo">WELCOME FOR MOMO XMD</span>
@@ -561,15 +600,6 @@
                 <button class="btn btn-qr" onclick="getQRCode()">&#128225; GENERATE QR CODE</button>
             </div>
 
-            <!-- SESSION ID DISPLAY -->
-            <div id="session-display" class="hide">
-                <div class="session-info">
-                    <div class="session-label">YOUR SESSION_ID</div>
-                    <div class="session-text" id="session-id-text"></div>
-                    <button class="btn btn-copy" onclick="copySessionId()" style="margin-top:10px;">&#128203; COPY SESSION_ID</button>
-                </div>
-            </div>
-
             <!-- CHANNEL & DEPLOY BUTTONS -->
             <div style="margin-top: 15px;">
                 <a href="https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U" target="_blank" class="btn btn-success">&#128172; JOIN SUPPORT CHANNEL</a>
@@ -585,21 +615,30 @@
             <a href="https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-dark">&#128039; VIEW REPO</a>
         </div>
 
+        <!-- PAIRING CODE RESULT SCREEN (hidden by default) -->
         <div id="code-screen" class="hide">
-            <button class="back-btn" onclick="goBack()">&#8592; Back</button>
+            <button class="back-btn" id="back-btn" onclick="goBack()">&#8592; Back</button>
             <div class="code-display">
                 <div class="copy-text">Tap button below to copy code</div>
                 <div class="code-box">
                     <div class="code-text" id="pair-code"></div>
                 </div>
                 <button class="btn btn-copy" onclick="copyCode()">&#128203; COPY CODE</button>
+                <div class="number-display" id="number-display"></div>
                 <div class="session-info" id="code-session-info" style="margin-top:15px;">
-                    <div class="session-label">PAIRING CODE</div>
+                    <div class="session-label">SESSION ID (for bot deployment)</div>
                     <div class="session-text" id="code-session-text"></div>
-                    <button class="btn btn-copy" onclick="copySessionCode()" style="margin-top:8px;">&#128203; COPY PAIRING CODE</button>
+                    <button class="btn btn-copy" onclick="copySessionCode()" style="margin-top:8px;">&#128203; COPY SESSION ID</button>
+                </div>
+                <div class="how-to" style="margin-top:15px;">
+                    <strong>Next Steps:</strong><br>
+                    1. Copy the pairing code above<br>
+                    2. Open WhatsApp → Settings → Linked Devices<br>
+                    3. Click "Link a Device"<br>
+                    4. Enter the pairing code<br>
+                    5. Save the SESSION_ID below for your bot
                 </div>
                 <a href="https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#128293; DEPLOY TO HEROKU</a>
-                <a href="https://render.com/deploy?repo=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#9889; DEPLOY TO RENDER</a>
             </div>
         </div>
         
@@ -609,15 +648,17 @@
     <script>
         let currentCode = '';
         let currentSessionId = '';
-        let activeServer = 'vps';
+        let currentNumber = '';
+        let isProcessing = false;
 
-        // Server endpoint mapping
-        const serverEndpoints = {
-            'vps': '/pair',
-            'heroku': '/pair',
-            'domain': '/pair',
-            'port': '/pair'
-        };
+        function showLoading(text) {
+            document.getElementById('loading-text').textContent = text;
+            document.getElementById('loading-overlay').classList.add('show');
+        }
+        
+        function hideLoading() {
+            document.getElementById('loading-overlay').classList.remove('show');
+        }
 
         function switchTab(tab) {
             const tabs = document.querySelectorAll('.tab');
@@ -632,7 +673,6 @@
                 tabs[idx].classList.add('active');
                 document.getElementById('tab-' + tab).classList.add('active');
             }
-            activeServer = tab;
         }
 
         function getInputId(server) {
@@ -646,41 +686,68 @@
         }
 
         async function getPairCode(server) {
+            // Prevent double-clicks
+            if (isProcessing) return;
+            
             const inputId = getInputId(server);
-            const number = document.getElementById(inputId).value;
+            const number = document.getElementById(inputId).value.trim();
+            
+            // Validate number
             if (!number) { 
-                alert('Enter phone number with country code'); 
+                alert('Please enter your WhatsApp number with country code'); 
                 return; 
             }
+            
+            // Clean number
+            const cleanNumber = number.replace(/[^0-9]/g, '');
+            if (cleanNumber.length < 9 || cleanNumber.length > 15) {
+                alert('Invalid phone number. Please enter a valid number with country code');
+                return;
+            }
+            
+            // Set processing flag
+            isProcessing = true;
+            currentNumber = cleanNumber;
             
             const btn = document.querySelector('#tab-' + server + ' .btn-primary');
             const originalText = btn.innerHTML;
             btn.innerHTML = '&#9203; GENERATING...';
             btn.disabled = true;
             btn.style.opacity = '0.7';
+            
+            showLoading('Connecting to WhatsApp servers...');
 
             try {
                 const res = await fetch('/pair', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number })
+                    body: JSON.stringify({ number: cleanNumber })
                 });
                 const data = await res.json();
+                
+                hideLoading();
                 
                 if (data.success) {
                     currentCode = data.code;
                     currentSessionId = data.sessionId || '';
-                    document.getElementById('pair-code').textContent = data.code;
                     
-                    // Show session ID if available
-                    if (data.sessionId) {
+                    // Set the pairing code on the result screen
+                    document.getElementById('pair-code').textContent = data.code;
+                    document.getElementById('number-display').textContent = 'Number: ' + cleanNumber;
+                    
+                    // Only show session info if sessionId exists
+                    if (data.sessionId && data.sessionId.length > 10) {
                         document.getElementById('code-session-text').textContent = data.sessionId;
+                        document.getElementById('code-session-info').style.display = 'block';
+                    } else {
+                        document.getElementById('code-session-text').textContent = 'Session ID will be generated after successful pairing';
                         document.getElementById('code-session-info').style.display = 'block';
                     }
                     
+                    // Switch to code screen
                     document.getElementById('main-screen').classList.add('hide');
                     document.getElementById('code-screen').classList.remove('hide');
-                    document.querySelector('.back-btn').style.display = 'block';
+                    document.getElementById('back-btn').style.display = 'block';
                 } else {
                     alert('ERROR: ' + (data.message || 'Unknown error'));
                 }
@@ -688,11 +755,15 @@
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 btn.style.opacity = '1';
+                isProcessing = false;
+                
             } catch (e) {
+                hideLoading();
                 alert('SERVER ERROR: Please check your connection and try again');
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 btn.style.opacity = '1';
+                isProcessing = false;
             }
         }
 
@@ -723,25 +794,30 @@
         function goBack() {
             document.getElementById('main-screen').classList.remove('hide');
             document.getElementById('code-screen').classList.add('hide');
-            document.querySelector('.back-btn').style.display = 'none';
+            document.getElementById('back-btn').style.display = 'none';
             // Clear all inputs
             document.querySelectorAll('input[type="text"]').forEach(i => i.value = '');
+            currentCode = '';
+            currentSessionId = '';
+            currentNumber = '';
         }
 
         function copyCode() {
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(currentCode).then(() => {
-                    showCopied();
-                }).catch(() => {
+            if (currentCode) {
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(currentCode).then(() => {
+                        showCopied();
+                    }).catch(() => {
+                        fallbackCopy(currentCode);
+                    });
+                } else {
                     fallbackCopy(currentCode);
-                });
-            } else {
-                fallbackCopy(currentCode);
+                }
             }
         }
 
         function copySessionCode() {
-            if (currentSessionId) {
+            if (currentSessionId && currentSessionId.length > 10) {
                 if (navigator.clipboard && window.isSecureContext) {
                     navigator.clipboard.writeText(currentSessionId).then(() => {
                         const btn = document.querySelector('.btn-copy');
@@ -755,19 +831,7 @@
                     fallbackCopy(currentSessionId);
                 }
             } else {
-                fallbackCopy(currentCode);
-            }
-        }
-
-        function copySessionId() {
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(currentSessionId).then(() => {
-                    showCopied();
-                }).catch(() => {
-                    fallbackCopy(currentSessionId);
-                });
-            } else {
-                fallbackCopy(currentSessionId);
+                alert('Session ID is not available yet. Pairing code must be accepted in WhatsApp first.');
             }
         }
 
@@ -789,14 +853,18 @@
         }
 
         function showCopied() {
-            const btn = document.querySelector('.btn-copy');
-            const original = btn.innerHTML;
-            btn.innerHTML = '&#9989; COPIED!';
-            btn.style.background = 'linear-gradient(135deg, #00ff64, #00c853)';
-            setTimeout(() => {
-                btn.innerHTML = original;
-                btn.style.background = 'linear-gradient(135deg, #6366f1, #4f46e5)';
-            }, 2000);
+            const btns = document.querySelectorAll('.btn-copy');
+            btns.forEach(btn => {
+                if (btn.textContent.includes('COPY')) {
+                    const original = btn.innerHTML;
+                    btn.innerHTML = '&#9989; COPIED!';
+                    btn.style.background = 'linear-gradient(135deg, #00ff64, #00c853)';
+                    setTimeout(() => {
+                        btn.innerHTML = original;
+                        btn.style.background = 'linear-gradient(135deg, #6366f1, #4f46e5)';
+                    }, 2000);
+                }
+            });
         }
     </script>
 </body>

@@ -12,6 +12,7 @@ const chalk = require('chalk')
 const pino = require('pino')
 const NodeCache = require('node-cache')
 const { Mutex } = require('async-mutex')
+const { HttpsProxyAgent } = require('https-proxy-agent')
 
 // ===== PROXY CONFIGURATION =====
 const USE_PROXY = true
@@ -30,20 +31,16 @@ const PROXY_LIST = [
 
 let proxyIndex = 0
 
-function getProxyAgent() {
+function getNextProxyAgent() {
     try {
-        const { HttpProxyAgent } = require('http-proxy-agent')
-        const { HttpsProxyAgent } = require('https-proxy-agent')
         const proxyUrl = PROXY_LIST[proxyIndex % PROXY_LIST.length]
         proxyIndex++
-        const proxyIp = proxyUrl.split('@')[1]?.split(':')[0] || proxyUrl
+        const proxyIp = proxyUrl.split('@')[1]?.split(':')[0] || proxyUrl.split('://')[1]?.split(':')[0] || 'unknown'
         console.log(chalk.cyan(`[PROXY] Using: ${proxyIp}`))
-        return {
-            http: new HttpProxyAgent(proxyUrl),
-            https: new HttpsProxyAgent(proxyUrl)
-        }
+        // Return a SINGLE HttpsProxyAgent instance - not an object
+        return new HttpsProxyAgent(proxyUrl)
     } catch (e) {
-        console.warn(chalk.yellow(`[PROXY] Proxy agents not available: ${e.message}`))
+        console.warn(chalk.yellow(`[PROXY] Error creating agent: ${e.message}`))
         return null
     }
 }
@@ -81,35 +78,47 @@ const pairingMutex = new Mutex()
 
 async function createSocketWithRetry(authDir, state, saveCreds, phoneNumber) {
     const { version } = await fetchLatestBaileysVersion()
+    let lastError = null
     
     // First: try direct connection
     console.log(chalk.cyan('[PAIRING] Attempting direct connection...'))
     try {
-        return await createSocket(authDir, state, saveCreds, version, null, phoneNumber)
+        const result = await createSocket(authDir, state, saveCreds, version, null, phoneNumber)
+        return result
     } catch (e) {
+        lastError = e
         console.log(chalk.yellow(`[PAIRING] Direct failed: ${e.message}`))
     }
     
     // Second: try with proxies (rotate through them)
     if (USE_PROXY) {
-        for (let i = 0; i < 3; i++) {
-            console.log(chalk.cyan(`[PAIRING] Proxy attempt ${i + 1}/3...`))
-            const agents = getProxyAgent()
-            if (agents) {
-                try {
-                    return await createSocket(authDir, state, saveCreds, version, agents, phoneNumber)
-                } catch (e) {
-                    console.log(chalk.yellow(`[PAIRING] Proxy ${i + 1} failed: ${e.message}`))
+        for (let i = 0; i < 5; i++) {
+            console.log(chalk.cyan(`[PAIRING] Proxy attempt ${i + 1}/5...`))
+            const agent = getNextProxyAgent()
+            if (!agent) continue
+            try {
+                // Create NEW auth state for each attempt
+                const proxyAuthDir = path.join(__dirname, 'auth_pairing_proxy_' + Date.now() + '_' + i)
+                if (fs.existsSync(proxyAuthDir)) {
+                    fs.rmSync(proxyAuthDir, { recursive: true, force: true })
                 }
+                fs.mkdirSync(proxyAuthDir, { recursive: true })
+                
+                const { state: proxyState, saveCreds: proxySaveCreds } = await useMultiFileAuthState(proxyAuthDir)
+                const result = await createSocket(proxyAuthDir, proxyState, proxySaveCreds, version, agent, phoneNumber)
+                return result
+            } catch (e) {
+                lastError = e
+                console.log(chalk.yellow(`[PAIRING] Proxy ${i + 1} failed: ${e.message}`))
             }
-            await new Promise(r => setTimeout(r, 1000))
+            await new Promise(r => setTimeout(r, 2000))
         }
     }
     
-    throw new Error('Unable to connect to WhatsApp. Your IP may be blocked. Try again later or use a different server.')
+    throw lastError || new Error('Unable to connect to WhatsApp. Try again later or use a different server.')
 }
 
-async function createSocket(authDir, state, saveCreds, version, agents, phoneNumber) {
+async function createSocket(authDir, state, saveCreds, version, agent, phoneNumber) {
     return new Promise((resolve, reject) => {
         let done = false
         let sock = null
@@ -133,9 +142,10 @@ async function createSocket(authDir, state, saveCreds, version, agents, phoneNum
             maxMsgRetryCount: 5
         }
 
-        if (agents) {
-            socketOptions.agent = agents
-            socketOptions.fetchAgent = agents
+        if (agent) {
+            // agent is a single HttpsProxyAgent instance, pass it directly
+            socketOptions.agent = agent
+            socketOptions.fetchAgent = agent
         }
 
         sock = makeWASocket(socketOptions)
@@ -172,16 +182,13 @@ async function createSocket(authDir, state, saveCreds, version, agents, phoneNum
                     console.log(chalk.green(`[PAIRING] Code generated: ${pairingCode}`))
 
                     // Try to save creds
-                    try {
-                        await saveCreds()
-                    } catch (e) {}
+                    try { await saveCreds() } catch (e) {}
 
-                    // Wait a bit then check for creds
+                    // Wait then collect session
                     setTimeout(async () => {
                         done = true
                         clearTimeout(timeout)
                         
-                        // Try to get session from saved creds
                         try {
                             const credsFile = path.join(authDir, 'creds.json')
                             if (fs.existsSync(credsFile)) {
@@ -203,7 +210,7 @@ async function createSocket(authDir, state, saveCreds, version, agents, phoneNum
                         resolve({ code: pairingCode, sessionId, phoneNumber })
                         
                         try { sock.end(new Error('Done')) } catch (e) {}
-                    }, 8000)
+                    }, 10000)
 
                 } catch (err) {
                     console.error(chalk.red(`[PAIRING] Error: ${err.message}`))
@@ -252,7 +259,6 @@ webApp.post('/pair', async (req, res) => {
 
         console.log(chalk.yellow(`[PAIRING] Request from: ${cleanNumber}`))
 
-        // Create temp auth directory
         const authDir = path.join(__dirname, 'auth_pairing_' + Date.now())
         if (fs.existsSync(authDir)) {
             fs.rmSync(authDir, { recursive: true, force: true })
@@ -277,7 +283,6 @@ webApp.post('/pair', async (req, res) => {
             message: error.message || 'Pairing failed. Please try again.'
         })
     } finally {
-        // Cleanup temp auth dirs after 30 seconds
         setTimeout(() => {
             try {
                 const dirs = fs.readdirSync(__dirname)
