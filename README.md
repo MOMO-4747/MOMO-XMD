@@ -20,8 +20,8 @@
 
 | **Action** | **Button** |
 | --- | --- |
-| **Fork Repository** | [![FORK REPO](https://img.shields.io/badge/FORK_REPO-000000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/MOMO-4747/MOMO-XMD/fork) |
-| **Download ZIP** | [![DOWNLOAD](https://img.shields.io/badge/DOWNLOAD-00C853?style=for-the-badge&logo=github&logoColor=white)](https://github.com/MOMO-4747/MOMO-XMD/archive/refs/heads/main.zip) |
+| **Fork Repository** | [[FORK REPO](https://img.shields.io/badge/FORK_REPO-000000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/MOMO-4747/MOMO-XMD/fork) |
+| **Download ZIP** | [[DOWNLOAD](https://img.shields.io/badge/DOWNLOAD-00C853?style=for-the-badge&logo=github&logoColor=white)](https://github.com/MOMO-4747/MOMO-XMD/archive/refs/heads/main.zip) |
 
 ---
 
@@ -29,8 +29,8 @@
 
 | **Platform** | **Button** |
 | --- | --- |
-| **Heroku** | [![HEROKUHOSTING](https://img.shields.io/badge/HEROKUHOSTING-7952B3?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD) |
-| **Render** | [![RENDER](https://img.shields.io/badge/RENDER-0099FF?style=for-the-badge&logo=render&logoColor=white)](https://render.com/deploy?repo=https://github.com/MOMO-4747/MOMO-XMD) |
+| **Heroku** | [[HEROKUHOSTING](https://img.shields.io/badge/HEROKUHOSTING-7952B3?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD) |
+| **Render** | [[RENDER](https://img.shields.io/badge/RENDER-0099FF?style=for-the-badge&logo=render&logoColor=white)](https://render.com/deploy?repo=https://github.com/MOMO-4747/MOMO-XMD) |
 
 ---
 
@@ -38,10 +38,10 @@
 
 | **Method** | **Button** |
 | --- | --- |
-| **MOMO-XMD SERVER 1** | [![MOMO-XMD SERVER 1](https://img.shields.io/badge/MOMO--XMD_SERVER_1-7952B3?style=for-the-badge&logo=heroku&logoColor=white)](https://momo-xmd-pairing-fa35bd7082ba.herokuapp.com/) |
-| **MOMO-XMD SERVER 2** | [![MOMO-XMD SERVER 2](https://img.shields.io/badge/MOMO--XMD_SERVER_2-0099FF?style=for-the-badge&logo=render&logoColor=white)](https://momo-xmd-pairing-render.onrender.com) |
-| **MOMO-XMD SERVER 3** | [![MOMO-XMD SERVER 3](https://img.shields.io/badge/MOMO--XMD_SERVER_3-000033?style=for-the-badge&logo=whatsapp&logoColor=white)](https://pair.momo-xmd.xyz) |
-| **SCAN QR CODE** | [![SCAN QR CODE](https://img.shields.io/badge/SCAN_QR_CODE-000033?style=for-the-badge&logo=whatsapp&logoColor=white)](http://212.224.86.233:8000/qr) |
+| **MOMO-XMD SERVER 1** | [[MOMO-XMD SERVER 1](https://img.shields.io/badge/MOMO--XMD_SERVER_1-7952B3?style=for-the-badge&logo=heroku&logoColor=white)](https://momo-xmd-pairing-fa35bd7082ba.herokuapp.com/) |
+| **MOMO-XMD SERVER 2** | [[MOMO-XMD SERVER 2](https://img.shields.io/badge/MOMO--XMD_SERVER_2-0099FF?style=for-the-badge&logo=render&logoColor=white)](https://momo-xmd-pairing-render.onrender.com) |
+| **MOMO-XMD SERVER 3** | [[MOMO-XMD SERVER 3](https://img.shields.io/badge/MOMO--XMD_SERVER_3-FFC107?style=for-the-badge&logo=duckduckgo&logoColor=black)](https://momo-xmd-pairing.duckdns.org) |
+| **SCAN QR CODE** | [[SCAN QR CODE](https://img.shields.io/badge/SCAN_QR_CODE-000033?style=for-the-badge&logo=whatsapp&logoColor=white)](http://212.224.86.233:8000/qr) |
 
 > **Note:** After pairing on any server, you will receive a `SESSION_ID` starting with `MOMO-XMD`. Copy it and paste it in your Heroku/Render Config Vars as `SESSION_ID`.
 
@@ -61,8 +61,8 @@
 
 | **Platform** | **Button** |
 | --- | --- |
-| **WhatsApp Channel** | [![JOIN CHANNEL](https://img.shields.io/badge/JOIN_CHANNEL-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H) |
-| **WhatsApp Group** | [![JOIN GROUP](https://img.shields.io/badge/JOIN_GROUP-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://chat.whatsapp.com/F5SgWtRKwr74Bfii6cVg0f?s=cl&p=a&ilr=0) |
+| **WhatsApp Channel** | [[JOIN CHANNEL](https://img.shields.io/badge/JOIN_CHANNEL-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H) |
+| **WhatsApp Group** | [[JOIN GROUP](https://img.shields.io/badge/JOIN_GROUP-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://chat.whatsapp.com/F5SgWtRKwr74Bfii6cVg0f?s=cl&p=a&ilr=0) |
 
 ---
 
@@ -70,8 +70,8 @@
 
 | **Contact** | **Button** |
 | --- | --- |
-| **Main Developer** | [![WHATSAPP](https://img.shields.io/badge/WHATSAPP-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://wa.me/255760298574) |
-| **Direct Message** | [![MESSAGE DEV](https://img.shields.io/badge/MESSAGE_DEV-075E54?style=for-the-badge&logo=whatsapp&logoColor=white)](https://wa.me/255760298574?text=Hello%20MOMO-XMD%20Dev) |
+| **Main Developer** | [[WHATSAPP](https://img.shields.io/badge/WHATSAPP-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://wa.me/255760298574) |
+| **Direct Message** | [[MESSAGE DEV](https://img.shields.io/badge/MESSAGE_DEV-075E54?style=for-the-badge&logo=whatsapp&logoColor=white)](https://wa.me/255760298574?text=Hello%20MOMO-XMD%20Dev) |
 
 ---
 
