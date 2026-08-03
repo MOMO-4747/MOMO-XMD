@@ -4,7 +4,8 @@ const {
     default: makeWASocket,
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore
+    makeCacheableSignalKeyStore,
+    DisconnectReason
 } = require('@whiskeysockets/baileys')
 const QRCode = require('qrcode')
 const pino = require('pino')
@@ -25,6 +26,7 @@ const sessions = new Map()
 const mutex = new Mutex()
 
 app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 app.use(express.static(path.join(__dirname, 'public')))
 
 // CORS headers
@@ -87,6 +89,8 @@ app.post('/pair', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid phone number' })
     }
 
+    console.log(`[PAIRING] New request for: ${cleanNumber}`)
+
     // Acquire mutex to prevent concurrent sessions
     const release = await mutex.acquire()
     
@@ -105,7 +109,7 @@ app.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
-        // Create socket with improved settings
+        // Create socket with improved settings for better stability
         const sock = makeWASocket({
             version,
             auth: {
@@ -114,15 +118,14 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ['MOMO-XMD', 'Chrome', '120.0.0'],
+            browser: ['Ubuntu', 'Chrome', '110.0.5481.177'], // Standard browser name
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             syncFullHistory: false,
-            connectTimeoutMs: 90000,
-            retryRequestDelayMs: 3000,
-            maxMsgRetryCount: 10,
-            keepAliveIntervalMs: 30000,
-            defaultQueryTimeoutMs: 60000
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0, // No timeout for queries
+            keepAliveIntervalMs: 10000,
+            generateHighQualityLinkPreview: true
         })
 
         let pairingCodeGenerated = false
@@ -143,7 +146,7 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'open' && !sessionConnected) {
                 sessionConnected = true
-                console.log('[PAIRING] Connected successfully!')
+                console.log(`[PAIRING] ${cleanNumber} connected successfully!`)
                 
                 try {
                     // Save credentials
@@ -171,9 +174,9 @@ app.post('/pair', async (req, res) => {
                                       `_Copy this ID and use it in your deployment._\n\n` +
                                       `*Support Channel:* https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H`
                             })
-                            console.log('[PAIRING] Session ID sent to WhatsApp')
+                            console.log(`[PAIRING] Session ID sent to ${cleanNumber}`)
                         } catch (msgErr) {
-                            console.log('[PAIRING] Could not send message, but session is valid')
+                            console.log(`[PAIRING] Could not send message to ${cleanNumber}, but session is valid`)
                         }
                     }
                 } catch (e) {
@@ -188,17 +191,16 @@ app.post('/pair', async (req, res) => {
                         if (fs.existsSync(authDir)) {
                             try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
                         }
-                    }, 15000)
-                }, 15000)
+                    }, 20000)
+                }, 20000)
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
-                console.log('[PAIRING] Connection closed, reason:', reason)
+                console.log(`[PAIRING] Connection closed for ${cleanNumber}, reason: ${reason}`)
                 
-                // Don't immediately end on close, let it retry
-                if (reason === 401 || reason === 403) {
-                    console.log('[PAIRING] Authentication error')
+                if (reason === DisconnectReason.loggedOut) {
+                    sessions.set(sessionKey, { status: 'error', error: 'Logged out from WhatsApp', timestamp: Date.now() })
                 }
             }
         })
@@ -211,29 +213,30 @@ app.post('/pair', async (req, res) => {
                 if (!resolved) {
                     resolved = true
                     try { sock.end(new Error('Timeout')) } catch (e) {}
-                    reject(new Error('Timeout waiting for pairing code - WhatsApp server not responding. Please try again.'))
+                    reject(new Error('WhatsApp server is taking too long. Please refresh and try again.'))
                 }
-            }, 60000)
+            }, 50000)
 
             sock.ev.on('connection.update', async (update) => {
                 if (resolved) return
                 if (update.connection === 'connecting' || update.qr) {
                     try {
-                        console.log('[PAIRING] Requesting pairing code for:', cleanNumber)
+                        console.log(`[PAIRING] Requesting code for: ${cleanNumber}`)
                         const code = await sock.requestPairingCode(cleanNumber)
                         if (!resolved) {
                             resolved = true
                             pairingCodeGenerated = true
                             clearTimeout(timeout)
-                            console.log('[PAIRING] Pairing code generated:', code)
+                            console.log(`[PAIRING] Code for ${cleanNumber}: ${code}`)
                             resolve(code)
                         }
                     } catch (err) {
+                        console.error(`[PAIRING] Request code error: ${err.message}`)
                         if (!resolved) {
                             resolved = true
                             clearTimeout(timeout)
                             try { sock.end(new Error('Failed to get code')) } catch (e) {}
-                            reject(new Error('Failed to generate pairing code: ' + err.message))
+                            reject(new Error('Failed to get pairing code. Check if the number is correct.'))
                         }
                     }
                 }
@@ -244,15 +247,15 @@ app.post('/pair', async (req, res) => {
             success: true,
             code: pairCode,
             sessionKey: sessionKey,
-            message: 'Pairing code generated successfully! Enter this code in WhatsApp within 2 minutes.'
+            message: 'Pairing code generated! Enter it in WhatsApp.'
         })
 
     } catch (error) {
-        console.error('[PAIRING] Error:', error.message)
+        console.error(`[PAIRING] Global Error: ${error.message}`)
         sessions.set(sessionKey, { status: 'error', error: error.message, timestamp: Date.now() })
         return res.status(500).json({
             success: false,
-            message: 'Failed to generate pairing code. Please try again.',
+            message: error.message || 'Server error. Please try again.',
             error: error.message
         })
     } finally {
@@ -263,10 +266,7 @@ app.post('/pair', async (req, res) => {
 // ===== QR CODE ENDPOINT =====
 app.get('/qr', async (req, res) => {
     const authDir = path.join(__dirname, 'auth_info_qr_' + Date.now())
-    
-    if (fs.existsSync(authDir)) {
-        fs.rmSync(authDir, { recursive: true, force: true })
-    }
+    if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
     fs.mkdirSync(authDir, { recursive: true })
 
     try {
@@ -281,12 +281,10 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ['MOMO-XMD', 'Chrome', '120.0.0'],
+            browser: ['Ubuntu', 'Chrome', '110.0.5481.177'],
             msgRetryCounterCache,
             syncFullHistory: false,
-            connectTimeoutMs: 90000,
-            retryRequestDelayMs: 3000,
-            maxMsgRetryCount: 10
+            connectTimeoutMs: 60000
         })
 
         sock.ev.on('creds.update', async () => {
@@ -299,9 +297,7 @@ app.get('/qr', async (req, res) => {
             if (qr) {
                 try {
                     const qrDataURL = await QRCode.toDataURL(qr)
-                    if (!res.headersSent) {
-                        res.json({ success: true, qr: qrDataURL })
-                    }
+                    if (!res.headersSent) res.json({ success: true, qr: qrDataURL })
                 } catch (e) {
                     if (!res.headersSent) {
                         res.set('Content-Type', 'text/plain')
@@ -320,67 +316,40 @@ app.get('/qr', async (req, res) => {
                         const credsData = fs.readFileSync(credsFile, 'utf-8')
                         const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`
                         const userId = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
-                        try {
-                            await sock.sendMessage(userId, { text: `*✅ MOMO-XMD Connected!*\n\nSession ID: ${sessionId}` })
-                        } catch (e) {}
+                        await sock.sendMessage(userId, { text: `*✅ MOMO-XMD Connected!*\n\nSession ID: ${sessionId}` })
                     }
                 } catch (e) {}
                 try { sock.end(undefined) } catch (e) {}
                 setTimeout(() => {
-                    if (fs.existsSync(authDir)) {
-                        try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
-                    }
+                    if (fs.existsSync(authDir)) try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
                 }, 15000)
             }
 
             if (connection === 'close') {
                 try { sock.end(undefined) } catch (e) {}
-                if (fs.existsSync(authDir)) {
-                    try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
-                }
+                if (fs.existsSync(authDir)) try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
             }
         })
 
         setTimeout(() => {
-            if (!res.headersSent) {
-                res.json({ success: false, message: 'QR expired. Please try again.' })
-            }
+            if (!res.headersSent) res.json({ success: false, message: 'QR expired. Please try again.' })
             try { sock.end(new Error('QR timeout')) } catch (e) {}
-            if (fs.existsSync(authDir)) {
-                try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
-            }
         }, 90000)
 
     } catch (error) {
-        if (!res.headersSent) {
-            res.status(500).json({ success: false, message: 'QR generation failed: ' + error.message })
-        }
+        if (!res.headersSent) res.status(500).json({ success: false, message: 'QR generation failed' })
     }
 })
 
-// ===== STATUS ENDPOINT =====
-app.get('/status', (req, res) => {
-    res.json({
-        status: 'online',
-        bot: 'MOMO-XMD',
-        version: '2.7.0',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString()
-    })
-})
-
-// ===== HEALTH CHECK =====
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK', bot: 'MOMO-XMD', version: '2.7.0' })
-})
+// ===== STATUS & HEALTH =====
+app.get('/status', (req, res) => res.json({ status: 'online', bot: 'MOMO-XMD', uptime: process.uptime() }))
+app.get('/health', (req, res) => res.json({ status: 'OK' }))
 
 // Clean up sessions map every hour
 setInterval(() => {
     const oneHourAgo = Date.now() - 3600000
     for (const [key, value] of sessions.entries()) {
-        if (value.timestamp && value.timestamp < oneHourAgo) {
-            sessions.delete(key)
-        }
+        if (value.timestamp && value.timestamp < oneHourAgo) sessions.delete(key)
     }
 }, 3600000)
 
@@ -388,11 +357,6 @@ setInterval(() => {
 process.on('uncaughtException', (err) => {
     if (err.code === 'EPIPE') return
     console.error('[PAIRING] Uncaught:', err.message)
-})
-
-process.on('unhandledRejection', (err) => {
-    if (err.code === 'EPIPE') return
-    console.error('[PAIRING] Unhandled:', err.message)
 })
 
 app.listen(PORT, () => {
