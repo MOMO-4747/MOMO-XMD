@@ -69,10 +69,12 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ['Ubuntu', 'Chrome', '110.0.5481.177'],
+            browser: ['MOMO-XMD', 'Chrome', '121.0.6167.140'], // Updated browser version
             markOnlineOnConnect: true,
             msgRetryCounterCache,
-            connectTimeoutMs: 60000
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0,
+            keepAliveIntervalMs: 10000
         })
 
         sock.ev.on('creds.update', saveCreds)
@@ -93,27 +95,34 @@ app.post('/pair', async (req, res) => {
                 }
                 setTimeout(() => {
                     try { sock.end(undefined) } catch (e) {}
-                    if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
-                }, 10000)
+                    setTimeout(() => {
+                        if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
+                    }, 10000)
+                }, 15000)
             }
         })
 
+        // Wait for connection to be ready before requesting code
+        await new Promise(r => setTimeout(r, 5000))
+
         // Get code
         let code = null
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 5; i++) {
             try {
-                await new Promise(r => setTimeout(r, 2000))
+                console.log(`[PAIRING] Attempt ${i+1} for ${cleanNumber}`)
                 code = await sock.requestPairingCode(cleanNumber)
                 if (code) break
             } catch (e) {
-                console.log(`Retry ${i+1} failed: ${e.message}`)
+                console.log(`[PAIRING] Attempt ${i+1} failed: ${e.message}`)
+                await new Promise(r => setTimeout(r, 3000))
             }
         }
 
-        if (!code) throw new Error('Failed to get pairing code from WhatsApp. Please try again.')
+        if (!code) throw new Error('WhatsApp server is busy. Please try again in a few seconds.')
 
         res.json({ success: true, code, sessionKey })
     } catch (error) {
+        console.error(`[PAIRING] Final error: ${error.message}`)
         sessions.set(sessionKey, { status: 'error', error: error.message })
         res.status(500).json({ success: false, message: error.message })
     } finally {
