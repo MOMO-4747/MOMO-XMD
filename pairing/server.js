@@ -69,7 +69,7 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ['Chrome (Linux)', '', ''],
+            browser: ['Ubuntu', 'Chrome', '110.0.5481.177'],
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000
