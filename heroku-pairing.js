@@ -4,8 +4,10 @@ const {
     default: makeWASocket,
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore
+    makeCacheableSignalKeyStore,
+    DisconnectReason
 } = require('@whiskeysockets/baileys')
+const QRCode = require('qrcode')
 const pino = require('pino')
 const NodeCache = require('node-cache')
 const fs = require('fs')
@@ -14,89 +16,97 @@ const { Mutex } = require('async-mutex')
 const app = express()
 const PORT = process.env.PORT || 3000
 
+// Cache for retry counters
 const msgRetryCounterCache = new NodeCache()
+
+// In-memory session storage for polling
+const sessions = new Map()
+
+// Mutex to queue requests
 const mutex = new Mutex()
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-// Serve pairing page
-const pairingPublicDir = path.join(__dirname, 'pairing', 'public')
-if (fs.existsSync(pairingPublicDir)) {
-    app.use(express.static(pairingPublicDir))
+// Serve public files from pairing/public
+const publicPath = path.join(__dirname, 'pairing', 'public')
+if (fs.existsSync(publicPath)) {
+    app.use(express.static(publicPath))
 }
 
+// CORS headers
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*')
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    res.header('Access-Control-Allow-Headers', 'Content-Type')
+    next()
+})
+
+// ===== LOGO PAGE =====
 app.get('/', (req, res) => {
-    const pairingIndex = path.join(pairingPublicDir, 'index.html')
-    if (fs.existsSync(pairingIndex)) {
-        res.sendFile(pairingIndex)
+    const indexPath = path.join(publicPath, 'index.html')
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath)
     } else {
-        res.send('<h1>MOMO-XMD Pairing Server</h1><p>Ready</p>')
+        res.send('<h1>MOMO-XMD Pairing Server</h1><p>Online</p>')
     }
 })
 
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK', bot: 'MOMO-XMD', version: '2.7.0' })
+// ===== SESSION STATUS ENDPOINT (POLLING) =====
+app.get('/session-status/:key', (req, res) => {
+    const key = req.params.key
+    const session = sessions.get(key)
+
+    if (!session) {
+        return res.json({ success: false, status: 'waiting', message: 'Waiting for connection...' })
+    }
+
+    if (session.error) {
+        return res.json({ success: false, status: 'error', message: session.error })
+    }
+
+    if (session.sessionId) {
+        return res.json({ 
+            success: true, 
+            status: 'connected', 
+            sessionReady: true,
+            sessionId: session.sessionId,
+            message: 'Connected successfully! Session ID generated.' 
+        })
+    }
+
+    return res.json({ success: false, status: 'waiting', message: 'Waiting for connection...' })
 })
 
-app.get('/status', (req, res) => {
-    res.json({ status: 'online', bot: 'MOMO-XMD', version: '2.7.0', uptime: process.uptime() })
-})
-
-// ===== PAIRING =====
+// ===== PAIRING CODE ENDPOINT =====
 app.post('/pair', async (req, res) => {
     const { number } = req.body
-    if (!number) return res.status(400).json({ success: false, message: 'Phone number required' })
+
+    if (!number) {
+        return res.status(400).json({ success: false, message: 'Phone number is required' })
+    }
 
     let cleanNumber = String(number).replace(/[^0-9]/g, '')
+
     if (cleanNumber.length < 9 || cleanNumber.length > 15) {
         return res.status(400).json({ success: false, message: 'Invalid phone number' })
     }
 
+    console.log(`[PAIRING] Request: ${cleanNumber}`)
+
     const release = await mutex.acquire()
+    const sessionKey = 'momo_' + Date.now() + '_' + Math.floor(Math.random() * 10000)
+    sessions.set(sessionKey, { status: 'starting', number: cleanNumber, timestamp: Date.now() })
+
     try {
-        const authDir = path.join(__dirname, 'auth_pairing_' + Date.now())
+        const authDir = path.join(__dirname, 'auth_info_' + Date.now())
         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
         fs.mkdirSync(authDir, { recursive: true })
 
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
-        console.log(`[PAIRING] Request: ${cleanNumber}`)
-        const result = await createSocket(authDir, state, saveCreds, version, cleanNumber)
-
-        res.json({
-            success: true,
-            code: result.code,
-            sessionId: result.sessionId,
-            message: 'Pairing successful! Enter code in WhatsApp → Linked Devices.'
-        })
-    } catch (error) {
-        console.error('[PAIRING] Error:', error.message)
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Pairing failed. Try again.'
-        })
-    } finally {
-        setTimeout(() => {
-            try {
-                fs.readdirSync(__dirname).filter(d => d.startsWith('auth_pairing_')).forEach(d => {
-                    fs.rmSync(path.join(__dirname, d), { recursive: true, force: true })
-                })
-            } catch (e) {}
-        }, 30000)
-        release()
-    }
-})
-
-async function createSocket(authDir, state, saveCreds, version, phoneNumber) {
-    return new Promise((resolve, reject) => {
-        let done = false
-        let sock = null
-        let pairingCode = null
-        let sessionBase64 = null
-
-        const socketOptions = {
+        const sock = makeWASocket({
             version,
             auth: {
                 creds: state.creds,
@@ -104,100 +114,117 @@ async function createSocket(authDir, state, saveCreds, version, phoneNumber) {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ['MOMO-XMD', 'Chrome', '120.0.0'],
+            browser: ['Ubuntu', 'Chrome', '110.0.5481.177'],
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             syncFullHistory: false,
-            connectTimeoutMs: 30000,
-            retryRequestDelayMs: 2000,
-            maxMsgRetryCount: 5
-        }
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0,
+            keepAliveIntervalMs: 10000
+        })
 
-        sock = makeWASocket(socketOptions)
+        let sessionConnected = false
 
         sock.ev.on('creds.update', async () => {
             try { await saveCreds() } catch (e) {}
         })
 
-        const timeout = setTimeout(() => {
-            if (!done) {
-                done = true
-                try { sock.end(new Error('Timeout')) } catch (e) {}
-                reject(new Error('Connection timeout - please try again'))
-            }
-        }, 45000)
-
         sock.ev.on('connection.update', async (update) => {
-            if (done) return
-            const { connection, qr } = update
+            const { connection, lastDisconnect } = update
 
-            if ((connection === 'connecting' || qr) && !done) {
+            if (connection === 'open' && !sessionConnected) {
+                sessionConnected = true
+                console.log(`[PAIRING] ${cleanNumber} connected!`)
+                
                 try {
-                    done = true
-                    clearTimeout(timeout)
-                    console.log(`[PAIRING] Requesting code for: ${phoneNumber}`)
+                    await saveCreds()
+                    await new Promise(r => setTimeout(r, 5000))
+                    const credsFile = path.join(authDir, 'creds.json')
+                    if (fs.existsSync(credsFile)) {
+                        const credsData = fs.readFileSync(credsFile, 'utf-8')
+                        const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`
+                        sessions.set(sessionKey, { status: 'connected', sessionId: sessionId, timestamp: Date.now() })
 
-                    pairingCode = await sock.requestPairingCode(phoneNumber)
-                    if (!pairingCode) throw new Error('Failed to get pairing code')
-
-                    console.log(`[PAIRING] Code: ${pairingCode}`)
-                    try { await saveCreds() } catch (e) {}
-
-                    setTimeout(async () => {
-                        done = true
-                        clearTimeout(timeout)
                         try {
-                            const credsFile = path.join(authDir, 'creds.json')
-                            if (fs.existsSync(credsFile)) {
-                                sessionBase64 = Buffer.from(fs.readFileSync(credsFile, 'utf-8')).toString('base64')
-                            }
+                            const userId = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
+                            await sock.sendMessage(userId, {
+                                text: `*✅ MOMO-XMD Connected!*\n\n*Your SESSION_ID:*\n\n${sessionId}\n\n*Support:* https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H`
+                            })
                         } catch (e) {}
+                    }
+                } catch (e) {}
 
-                        if (!sessionBase64) {
-                            sessionBase64 = Buffer.from(JSON.stringify({
-                                pairingCode, phoneNumber, timestamp: Date.now(), bot: 'MOMO-XMD'
-                            })).toString('base64')
-                        }
-
-                        const sessionId = `MOMO-XMD~${sessionBase64}`
-                        resolve({ code: pairingCode, sessionId, phoneNumber })
-                        try { sock.end(new Error('Done')) } catch (e) {}
+                setTimeout(() => {
+                    try { sock.end(undefined) } catch (e) {}
+                    setTimeout(() => {
+                        if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
                     }, 10000)
-                } catch (err) {
-                    console.error(`[PAIRING] Error: ${err.message}`)
-                    reject(err)
-                }
+                }, 15000)
             }
 
             if (connection === 'close') {
-                if (!done) {
-                    done = true
-                    clearTimeout(timeout)
-                    reject(new Error('Connection Closed'))
+                const reason = lastDisconnect?.error?.output?.statusCode
+                if (reason === DisconnectReason.loggedOut) {
+                    sessions.set(sessionKey, { status: 'error', error: 'Logged out', timestamp: Date.now() })
                 }
             }
-
-            if (connection === 'open') {
-                console.log('[PAIRING] WhatsApp connected!')
-                try {
-                    await saveCreds()
-                    const credsFile = path.join(authDir, 'creds.json')
-                    if (fs.existsSync(credsFile)) {
-                        sessionBase64 = Buffer.from(fs.readFileSync(credsFile, 'utf-8')).toString('base64')
-                    }
-                } catch (e) {}
-            }
         })
-    })
-}
 
-app.listen(PORT, () => {
-    console.log(`\n┌─────────────────────────────────────────┐`)
-    console.log(`│     MOMO-XMD Pairing Server Ready      │`)
-    console.log(`│     Port: ${PORT}                              │`)
-    console.log(`│     Platform: Heroku                      │`)
-    console.log(`└─────────────────────────────────────────┘\n`)
+        const pairCode = await new Promise((resolve, reject) => {
+            let resolved = false
+            const timeout = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true
+                    try { sock.end(new Error('Timeout')) } catch (e) {}
+                    reject(new Error('WhatsApp server timeout. Try again.'))
+                }
+            }, 50000)
+
+            sock.ev.on('connection.update', async (update) => {
+                if (resolved) return
+                if (update.connection === 'connecting' || update.qr) {
+                    try {
+                        const code = await sock.requestPairingCode(cleanNumber)
+                        if (!resolved) {
+                            resolved = true
+                            clearTimeout(timeout)
+                            resolve(code)
+                        }
+                    } catch (err) {
+                        if (!resolved) {
+                            resolved = true
+                            clearTimeout(timeout)
+                            try { sock.end(new Error('Failed')) } catch (e) {}
+                            reject(new Error('Failed to get code.'))
+                        }
+                    }
+                }
+            })
+        })
+
+        return res.json({ success: true, code: pairCode, sessionKey: sessionKey })
+
+    } catch (error) {
+        console.error(`[PAIRING] Error: ${error.message}`)
+        sessions.set(sessionKey, { status: 'error', error: error.message, timestamp: Date.now() })
+        return res.status(500).json({ success: false, message: error.message })
+    } finally {
+        release()
+    }
 })
 
-process.on('uncaughtException', (err) => console.error('[ERROR]', err.message))
-process.on('unhandledRejection', (err) => console.error('[ERROR]', err.message))
+// ===== STATUS & HEALTH =====
+app.get('/status', (req, res) => res.json({ status: 'online', bot: 'MOMO-XMD' }))
+app.get('/health', (req, res) => res.json({ status: 'OK' }))
+
+// Clean up
+setInterval(() => {
+    const oneHourAgo = Date.now() - 3600000
+    for (const [key, value] of sessions.entries()) {
+        if (value.timestamp < oneHourAgo) sessions.delete(key)
+    }
+}, 3600000)
+
+app.listen(PORT, () => {
+    console.log(`MOMO-XMD Pairing Server running on port ${PORT}`);
+})
