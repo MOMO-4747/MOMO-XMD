@@ -1,1 +1,1 @@
-web: node main.js
+web: node heroku-pairing.js
