@@ -822,7 +822,7 @@
             
             currentSessionKey = sessionKey;
             let pollCount = 0;
-            const maxPolls = 60; // 2 minutes (check every 2 seconds)
+            const maxPolls = 120; // 4 minutes (check every 2 seconds)
             
             const sessionInfo = document.getElementById('code-session-info');
             const sessionText = document.getElementById('code-session-text');
@@ -851,7 +851,7 @@
                 } catch (e) {
                     // Ignore polling errors
                 }
-            }, 3000);
+            , 2000);
         }
 
         function goBack() {
