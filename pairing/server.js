@@ -69,18 +69,37 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ['MOMO-XMD', 'Chrome', '121.0.6167.140'], // Updated browser version
+            browser: ['Ubuntu', 'Chrome', '20.0.04'],
             markOnlineOnConnect: true,
             msgRetryCounterCache,
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 0,
-            keepAliveIntervalMs: 10000
+            connectTimeoutMs: 60000
         })
 
         sock.ev.on('creds.update', saveCreds)
 
+        let pairingCode = null
+        let resolved = false
+
+        const getCode = async () => {
+            try {
+                await new Promise(r => setTimeout(r, 3000))
+                pairingCode = await sock.requestPairingCode(cleanNumber)
+                if (pairingCode && !resolved) {
+                    resolved = true
+                    res.json({ success: true, code: pairingCode, sessionKey })
+                }
+            } catch (e) {
+                console.log('Error getting code:', e.message)
+            }
+        }
+
         sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect } = update
+            const { connection, lastDisconnect, qr } = update
+            
+            if (qr && !pairingCode && !resolved) {
+                await getCode()
+            }
+
             if (connection === 'open') {
                 await saveCreds()
                 await new Promise(r => setTimeout(r, 5000))
@@ -100,31 +119,41 @@ app.post('/pair', async (req, res) => {
                     }, 10000)
                 }, 15000)
             }
+
+            if (connection === 'close') {
+                const reason = lastDisconnect?.error?.output?.statusCode
+                if (reason === DisconnectReason.loggedOut) {
+                    sessions.set(sessionKey, { status: 'error', error: 'Logged out', timestamp: Date.now() })
+                }
+                // If closed before resolving, we might need to handle it
+                if (!resolved && connection === 'close') {
+                    // Try to restart or fail
+                }
+            }
         })
 
-        // Wait for connection to be ready before requesting code
-        await new Promise(r => setTimeout(r, 5000))
-
-        // Get code
-        let code = null
-        for (let i = 0; i < 5; i++) {
-            try {
-                console.log(`[PAIRING] Attempt ${i+1} for ${cleanNumber}`)
-                code = await sock.requestPairingCode(cleanNumber)
-                if (code) break
-            } catch (e) {
-                console.log(`[PAIRING] Attempt ${i+1} failed: ${e.message}`)
-                await new Promise(r => setTimeout(r, 3000))
+        // Fallback if no QR event is fired
+        setTimeout(async () => {
+            if (!pairingCode && !resolved) {
+                await getCode()
             }
-        }
+        }, 5000)
 
-        if (!code) throw new Error('WhatsApp server is busy. Please try again in a few seconds.')
+        // Overall timeout for the HTTP request
+        setTimeout(() => {
+            if (!resolved) {
+                resolved = true
+                try { sock.end(undefined) } catch (e) {}
+                res.status(500).json({ success: false, message: 'WhatsApp is slow. Please try again.' })
+            }
+        }, 45000)
 
-        res.json({ success: true, code, sessionKey })
     } catch (error) {
-        console.error(`[PAIRING] Final error: ${error.message}`)
-        sessions.set(sessionKey, { status: 'error', error: error.message })
-        res.status(500).json({ success: false, message: error.message })
+        if (!resolved) {
+            resolved = true
+            sessions.set(sessionKey, { status: 'error', error: error.message })
+            res.status(500).json({ success: false, message: error.message })
+        }
     } finally {
         release()
     }
