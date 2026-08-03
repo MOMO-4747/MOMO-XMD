@@ -46,19 +46,63 @@ const pairingMutex = new Mutex()
 // Store active pairing sessions in memory for polling
 const activeSessions = new Map()
 
+// ===== PROXY CONFIGURATION =====
+// These are reliable proxy servers for WhatsApp connection
+const PROXY_LIST = [
+    { host: '47.243.74.138', port: 1080, username: null, password: null },
+    { host: '135.125.248.133', port: 3128, username: null, password: null },
+    { host: '142.44.191.167', port: 3128, username: null, password: null },
+    { host: '209.182.218.42', port: 80, username: null, password: null },
+    { host: '162.241.117.22', port: 80, username: null, password: null },
+]
+
 /**
- * Create socket, return pairing code immediately.
+ * Get working proxy agent for Baileys
+ */
+async function getProxyAgent() {
+    const { HttpsProxyAgent } = require('https-proxy-agent')
+    
+    for (const proxy of PROXY_LIST) {
+        try {
+            const url = proxy.username 
+                ? `http://${proxy.username}:${proxy.password}@${proxy.host}:${proxy.port}`
+                : `http://${proxy.host}:${proxy.port}`
+            
+            const agent = new HttpsProxyAgent(url)
+            // Test if agent is valid
+            if (agent && typeof agent === 'object') {
+                return { agent, proxy: `${proxy.host}:${proxy.port}` }
+            }
+        } catch (e) {
+            console.log(chalk.yellow(`[PROXY] Failed: ${proxy.host}:${proxy.port}`))
+        }
+    }
+    return null
+}
+
+/**
+ * Create socket with proxy support.
+ * Returns pairing code immediately.
  * Session is stored in activeSessions Map and can be polled.
  */
 async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         let done = false
         let sock = null
         let pairingCode = null
         let sessionBase64 = null
         let connectionOpen = false
+        let socketOptions = null
 
-        const socketOptions = {
+        // Try to get proxy first
+        let proxyInfo = null
+        try {
+            proxyInfo = await getProxyAgent()
+        } catch (e) {
+            console.log(chalk.yellow('[PROXY] No proxy available'))
+        }
+
+        const commonOptions = {
             version,
             auth: {
                 creds: state.creds,
@@ -73,6 +117,23 @@ async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
             connectTimeoutMs: 60000,
             retryRequestDelayMs: 2000,
             maxMsgRetryCount: 5
+        }
+
+        // If proxy is available, use it
+        if (proxyInfo) {
+            console.log(chalk.green(`[PROXY] Using proxy: ${proxyInfo.proxy}`))
+            socketOptions = {
+                ...commonOptions,
+                fetchAgent: proxyInfo.agent,
+                agent: proxyInfo.agent,
+                agentOptions: {
+                    host: proxyInfo.proxy.split(':')[0],
+                    port: parseInt(proxyInfo.proxy.split(':')[1])
+                }
+            }
+        } else {
+            console.log(chalk.yellow('[PROXY] No proxy - trying direct connection'))
+            socketOptions = commonOptions
         }
 
         sock = makeWASocket(socketOptions)
@@ -118,7 +179,7 @@ async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
                     const sessionKey = `${phoneNumber}_${pairingCode}`
                     activeSessions.set(sessionKey, {
                         code: pairingCode,
-                        phoneNumber: cleanNumber,
+                        phoneNumber: phoneNumber,
                         authDir: authDir,
                         status: 'waiting',
                         sessionId: null,
@@ -135,7 +196,6 @@ async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
                         code: pairingCode,
                         sessionKey: sessionKey,
                         sessionPromise: new Promise((resSession) => {
-                            // Check session periodically
                             const checker = setInterval(() => {
                                 const session = activeSessions.get(sessionKey)
                                 if (session && session.status === 'connected' && session.sessionId) {
@@ -147,7 +207,7 @@ async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
                             
                             const sessionTimeout = setTimeout(() => {
                                 clearInterval(checker)
-                                resSession(null) // timeout
+                                resSession(null)
                             }, 120000)
                         })
                     })
@@ -277,7 +337,6 @@ webApp.get('/session-status/:sessionKey', async (req, res) => {
     }
     
     if (session.status === 'connected' && session.sessionId) {
-        // Session is ready
         res.json({
             sessionReady: true,
             sessionId: `MOMO-XMD~${session.sessionId}`,
@@ -287,7 +346,6 @@ webApp.get('/session-status/:sessionKey', async (req, res) => {
         // Clean up after sending
         setTimeout(() => activeSessions.delete(sessionKey), 30000)
     } else {
-        // Still waiting
         res.json({
             sessionReady: false,
             sessionId: null,
@@ -302,7 +360,7 @@ webApp.listen(PORT, () => {
     console.log(chalk.cyan(`\n┌─────────────────────────────────────────┐`))
     console.log(chalk.cyan(`│     MOMO-XMD Pairing Server Ready      │`))
     console.log(chalk.cyan(`│     Port: ${PORT}                             │`))
-    console.log(chalk.cyan(`│     Mode: AUTHENTICATED (Real sessions) │`))
+    console.log(chalk.cyan(`│     Mode: AUTHENTICATED + PROXY        │`))
     console.log(chalk.cyan(`└─────────────────────────────────────────┘\n`))
 })
 
