@@ -12,38 +12,6 @@ const chalk = require('chalk')
 const pino = require('pino')
 const NodeCache = require('node-cache')
 const { Mutex } = require('async-mutex')
-const { HttpsProxyAgent } = require('https-proxy-agent')
-
-// ===== PROXY CONFIGURATION =====
-const USE_PROXY = true
-const PROXY_LIST = [
-    'http://xclayddg:us4xfz7g8vto@31.59.20.176:6754',
-    'http://xclayddg:us4xfz7g8vto@31.56.127.193:7684',
-    'http://xclayddg:us4xfz7g8vto@45.38.107.97:6014',
-    'http://xclayddg:us4xfz7g8vto@198.105.121.200:6462',
-    'http://xclayddg:us4xfz7g8vto@64.137.96.74:6641',
-    'http://xclayddg:us4xfz7g8vto@198.23.243.226:6361',
-    'http://xclayddg:us4xfz7g8vto@38.154.185.97:6370',
-    'http://188.214.31.220:6205',
-    'http://213.230.94.58:8198',
-    'http://45.89.52.66:8000',
-]
-
-let proxyIndex = 0
-
-function getNextProxyAgent() {
-    try {
-        const proxyUrl = PROXY_LIST[proxyIndex % PROXY_LIST.length]
-        proxyIndex++
-        const proxyIp = proxyUrl.split('@')[1]?.split(':')[0] || proxyUrl.split('://')[1]?.split(':')[0] || 'unknown'
-        console.log(chalk.cyan(`[PROXY] Using: ${proxyIp}`))
-        // Return a SINGLE HttpsProxyAgent instance - not an object
-        return new HttpsProxyAgent(proxyUrl)
-    } catch (e) {
-        console.warn(chalk.yellow(`[PROXY] Error creating agent: ${e.message}`))
-        return null
-    }
-}
 
 // ===== EXPRESS SERVER (PAIRING) =====
 const express = require('express')
@@ -76,49 +44,7 @@ webApp.get('/health', (req, res) => {
 const msgRetryCounterCache = new NodeCache()
 const pairingMutex = new Mutex()
 
-async function createSocketWithRetry(authDir, state, saveCreds, phoneNumber) {
-    const { version } = await fetchLatestBaileysVersion()
-    let lastError = null
-    
-    // First: try direct connection
-    console.log(chalk.cyan('[PAIRING] Attempting direct connection...'))
-    try {
-        const result = await createSocket(authDir, state, saveCreds, version, null, phoneNumber)
-        return result
-    } catch (e) {
-        lastError = e
-        console.log(chalk.yellow(`[PAIRING] Direct failed: ${e.message}`))
-    }
-    
-    // Second: try with proxies (rotate through them)
-    if (USE_PROXY) {
-        for (let i = 0; i < 5; i++) {
-            console.log(chalk.cyan(`[PAIRING] Proxy attempt ${i + 1}/5...`))
-            const agent = getNextProxyAgent()
-            if (!agent) continue
-            try {
-                // Create NEW auth state for each attempt
-                const proxyAuthDir = path.join(__dirname, 'auth_pairing_proxy_' + Date.now() + '_' + i)
-                if (fs.existsSync(proxyAuthDir)) {
-                    fs.rmSync(proxyAuthDir, { recursive: true, force: true })
-                }
-                fs.mkdirSync(proxyAuthDir, { recursive: true })
-                
-                const { state: proxyState, saveCreds: proxySaveCreds } = await useMultiFileAuthState(proxyAuthDir)
-                const result = await createSocket(proxyAuthDir, proxyState, proxySaveCreds, version, agent, phoneNumber)
-                return result
-            } catch (e) {
-                lastError = e
-                console.log(chalk.yellow(`[PAIRING] Proxy ${i + 1} failed: ${e.message}`))
-            }
-            await new Promise(r => setTimeout(r, 2000))
-        }
-    }
-    
-    throw lastError || new Error('Unable to connect to WhatsApp. Try again later or use a different server.')
-}
-
-async function createSocket(authDir, state, saveCreds, version, agent, phoneNumber) {
+async function createSocket(authDir, state, saveCreds, version, phoneNumber) {
     return new Promise((resolve, reject) => {
         let done = false
         let sock = null
@@ -140,12 +66,6 @@ async function createSocket(authDir, state, saveCreds, version, agent, phoneNumb
             connectTimeoutMs: 30000,
             retryRequestDelayMs: 2000,
             maxMsgRetryCount: 5
-        }
-
-        if (agent) {
-            // agent is a single HttpsProxyAgent instance, pass it directly
-            socketOptions.agent = agent
-            socketOptions.fetchAgent = agent
         }
 
         sock = makeWASocket(socketOptions)
@@ -181,7 +101,7 @@ async function createSocket(authDir, state, saveCreds, version, agent, phoneNumb
 
                     console.log(chalk.green(`[PAIRING] Code generated: ${pairingCode}`))
 
-                    // Try to save creds
+                    // Save creds
                     try { await saveCreds() } catch (e) {}
 
                     // Wait then collect session
@@ -222,7 +142,8 @@ async function createSocket(authDir, state, saveCreds, version, agent, phoneNumb
                 if (!done) {
                     done = true
                     clearTimeout(timeout)
-                    reject(new Error('Connection Closed'))
+                    const lastDisconnect = sock.ws?.lastDisconnect
+                    reject(new Error('Connection Closed: ' + (lastDisconnect?.error?.output?.payload?.statusCode || '')))
                 }
             }
 
@@ -266,8 +187,9 @@ webApp.post('/pair', async (req, res) => {
         fs.mkdirSync(authDir, { recursive: true })
 
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
+        const { version } = await fetchLatestBaileysVersion()
         
-        const result = await createSocketWithRetry(authDir, state, saveCreds, cleanNumber)
+        const result = await createSocket(authDir, state, saveCreds, version, cleanNumber)
         
         res.json({
             success: true,
@@ -301,7 +223,7 @@ webApp.listen(PORT, () => {
     console.log(chalk.cyan(`\n┌─────────────────────────────────────────┐`))
     console.log(chalk.cyan(`│     MOMO-XMD Pairing Server Ready      │`))
     console.log(chalk.cyan(`│     Port: ${PORT}                             │`))
-    console.log(chalk.cyan(`│     Proxy: ${USE_PROXY ? 'ENABLED' : 'DIRECT'}                          │`))
+    console.log(chalk.cyan(`│     Mode: DIRECT (IP works!)              │`))
     console.log(chalk.cyan(`└─────────────────────────────────────────┘\n`))
 })
 
