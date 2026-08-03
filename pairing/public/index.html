@@ -730,18 +730,29 @@
                 if (data.success) {
                     currentCode = data.code;
                     currentSessionId = data.sessionId || '';
+                    const sessionKey = data.sessionKey || '';
                     
                     // Set the pairing code on the result screen
                     document.getElementById('pair-code').textContent = data.code;
                     document.getElementById('number-display').textContent = 'Number: ' + cleanNumber;
                     
-                    // Only show session info if sessionId exists
-                    if (data.sessionId && data.sessionId.length > 10) {
-                        document.getElementById('code-session-text').textContent = data.sessionId;
+                    // Show session status
+                    const sessionText = document.getElementById('code-session-text');
+                    const sessionBtn = document.getElementById('code-session-info').querySelector('.btn-copy');
+                    
+                    if (data.sessionReady && data.sessionId && data.sessionId.length > 10) {
+                        // WhatsApp already accepted - show session immediately
+                        currentSessionId = data.sessionId;
+                        sessionText.textContent = data.sessionId;
                         document.getElementById('code-session-info').style.display = 'block';
+                        sessionBtn.style.display = 'block';
                     } else {
-                        document.getElementById('code-session-text').textContent = 'Session ID will be generated after successful pairing';
+                        // Waiting for WhatsApp to accept - start polling
+                        sessionText.textContent = '⏳ Waiting for WhatsApp to accept pairing code...\nEnter the code above in WhatsApp → Settings → Linked Devices';
                         document.getElementById('code-session-info').style.display = 'block';
+                        sessionBtn.style.display = 'none';
+                        // Start polling for session using session key
+                        startSessionPolling(sessionKey);
                     }
                     
                     // Switch to code screen
@@ -791,7 +802,60 @@
             }
         }
 
+        let sessionPollTimer = null;
+
+        let currentSessionKey = '';
+
+        function startSessionPolling(sessionKey) {
+            // Clear any existing polling
+            if (sessionPollTimer) clearInterval(sessionPollTimer);
+            if (!sessionKey) {
+                // No session key - just show waiting message
+                const sessionText = document.getElementById('code-session-text');
+                const sessionBtn = document.getElementById('code-session-info').querySelector('.btn-copy');
+                setTimeout(() => {
+                    sessionText.textContent = 'Session timeout - WhatsApp did not accept the code. Please try again.';
+                    sessionBtn.style.display = 'none';
+                }, 120000);
+                return;
+            }
+            
+            currentSessionKey = sessionKey;
+            let pollCount = 0;
+            const maxPolls = 60; // 2 minutes (check every 2 seconds)
+            
+            const sessionInfo = document.getElementById('code-session-info');
+            const sessionText = document.getElementById('code-session-text');
+            const sessionBtn = sessionInfo.querySelector('.btn-copy');
+            
+            sessionPollTimer = setInterval(async () => {
+                pollCount++;
+                
+                if (pollCount > maxPolls) {
+                    clearInterval(sessionPollTimer);
+                    sessionText.textContent = 'Session timeout - WhatsApp did not accept the code. Please try again.';
+                    sessionBtn.style.display = 'none';
+                    return;
+                }
+                
+                try {
+                    const res = await fetch('/session-status/' + sessionKey);
+                    const data = await res.json();
+                    
+                    if (data.sessionReady && data.sessionId) {
+                        clearInterval(sessionPollTimer);
+                        currentSessionId = data.sessionId;
+                        sessionText.textContent = data.sessionId;
+                        sessionBtn.style.display = 'block';
+                    }
+                } catch (e) {
+                    // Ignore polling errors
+                }
+            }, 3000);
+        }
+
         function goBack() {
+            if (sessionPollTimer) clearInterval(sessionPollTimer);
             document.getElementById('main-screen').classList.remove('hide');
             document.getElementById('code-screen').classList.add('hide');
             document.getElementById('back-btn').style.display = 'none';

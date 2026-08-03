@@ -5,7 +5,6 @@ const {
     makeCacheableSignalKeyStore,
     DisconnectReason
 } = require('@whiskeysockets/baileys')
-const { Boom } = require('@hapi/boom')
 const fs = require('fs')
 const path = require('path')
 const chalk = require('chalk')
@@ -44,11 +43,12 @@ webApp.get('/health', (req, res) => {
 const msgRetryCounterCache = new NodeCache()
 const pairingMutex = new Mutex()
 
+// Store active pairing sessions in memory for polling
+const activeSessions = new Map()
+
 /**
- * Create socket and wait for WhatsApp to ACCEPT the pairing code.
- * Only returns Session ID after WhatsApp connection is "open".
- * Returns pairing code immediately (for user to enter on phone).
- * Returns real session only after WhatsApp confirms.
+ * Create socket, return pairing code immediately.
+ * Session is stored in activeSessions Map and can be polled.
  */
 async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
     return new Promise((resolve, reject) => {
@@ -77,12 +77,11 @@ async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
 
         sock = makeWASocket(socketOptions)
 
-        // Save credentials on update
         sock.ev.on('creds.update', async () => {
             try { await saveCreds() } catch (e) {}
         })
 
-        // Overall timeout (2 minutes for WhatsApp to accept)
+        // Overall timeout (2 minutes)
         const timeout = setTimeout(() => {
             if (!done) {
                 done = true
@@ -115,24 +114,40 @@ async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
                     
                     try { await saveCreds() } catch (e) {}
 
-                    // Return pairing code immediately (user needs to enter it on phone)
-                    // But also resolve when WhatsApp connects
-                    resolve({ 
-                        code: pairingCode, 
-                        resolveSession: () => sessionBase64,
-                        waitForSession: new Promise((resSession, rejSession) => {
-                            // Session will be resolved when connection opens
-                            const checkSession = setInterval(() => {
-                                if (connectionOpen && sessionBase64) {
-                                    clearInterval(checkSession)
+                    // Store session state for polling
+                    const sessionKey = `${phoneNumber}_${pairingCode}`
+                    activeSessions.set(sessionKey, {
+                        code: pairingCode,
+                        phoneNumber: cleanNumber,
+                        authDir: authDir,
+                        status: 'waiting',
+                        sessionId: null,
+                        createdAt: Date.now()
+                    })
+
+                    // Clean up after timeout
+                    setTimeout(() => {
+                        activeSessions.delete(sessionKey)
+                    }, 180000)
+
+                    // Resolve immediately with pairing code
+                    resolve({
+                        code: pairingCode,
+                        sessionKey: sessionKey,
+                        sessionPromise: new Promise((resSession) => {
+                            // Check session periodically
+                            const checker = setInterval(() => {
+                                const session = activeSessions.get(sessionKey)
+                                if (session && session.status === 'connected' && session.sessionId) {
+                                    clearInterval(checker)
                                     clearTimeout(sessionTimeout)
-                                    resSession(sessionBase64)
+                                    resSession(session.sessionId)
                                 }
-                            }, 2000)
+                            }, 3000)
                             
                             const sessionTimeout = setTimeout(() => {
-                                clearInterval(checkSession)
-                                rejSession(new Error('WhatsApp did not accept the pairing code within 2 minutes'))
+                                clearInterval(checker)
+                                resSession(null) // timeout
                             }, 120000)
                         })
                     })
@@ -156,31 +171,36 @@ async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
                     const credsFile = path.join(authDir, 'creds.json')
                     if (fs.existsSync(credsFile)) {
                         sessionBase64 = Buffer.from(fs.readFileSync(credsFile, 'utf-8')).toString('base64')
-                        console.log(chalk.green('[PAIRING] Real Session ID generated from authenticated connection'))
+                        console.log(chalk.green('[PAIRING] Real Session ID generated'))
+                        
+                        // Update stored session
+                        if (pairingCode) {
+                            const key = `${phoneNumber}_${pairingCode}`
+                            const session = activeSessions.get(key)
+                            if (session) {
+                                session.status = 'connected'
+                                session.sessionId = sessionBase64
+                            }
+                        }
                     }
                 } catch (e) {
                     console.error(chalk.red(`[PAIRING] Error saving session: ${e.message}`))
                 }
 
-                // Keep connection alive for 5 more seconds then close
+                // Keep connection alive for 10 more seconds then close
                 setTimeout(() => {
                     if (!done) {
                         done = true
                         clearTimeout(timeout)
                         try { sock.end(new Error('Pairing complete')) } catch (e) {}
                     }
-                }, 5000)
+                }, 10000)
             }
 
             // When connection closes
             if (connection === 'close') {
                 const statusCode = lastDisconnect?.error?.output?.payload?.statusCode
                 console.log(chalk.red(`[PAIRING] Connection closed: ${statusCode}`))
-                
-                // If we have session but WhatsApp closed, it might be reconnection
-                if (connectionOpen && sessionBase64) {
-                    // Session is valid
-                }
                 
                 if (!done && statusCode === DisconnectReason.loggedOut) {
                     done = true
@@ -194,21 +214,21 @@ async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
 
 // ===== PAIRING ENDPOINT =====
 webApp.post('/pair', async (req, res) => {
+    const { number } = req.body
+
+    if (!number) {
+        return res.status(400).json({ success: false, message: 'Phone number required' })
+    }
+
+    let cleanNumber = String(number).replace(/[^0-9]/g, '')
+    
+    if (cleanNumber.length < 9 || cleanNumber.length > 15) {
+        return res.status(400).json({ success: false, message: 'Invalid phone number' })
+    }
+
     const release = await pairingMutex.acquire()
     
     try {
-        const { number } = req.body
-
-        if (!number) {
-            return res.status(400).json({ success: false, message: 'Phone number required' })
-        }
-
-        let cleanNumber = String(number).replace(/[^0-9]/g, '')
-        
-        if (cleanNumber.length < 9 || cleanNumber.length > 15) {
-            return res.status(400).json({ success: false, message: 'Invalid phone number' })
-        }
-
         console.log(chalk.yellow(`[PAIRING] Request from: ${cleanNumber}`))
 
         const authDir = path.join(__dirname, 'auth_pairing_' + Date.now())
@@ -222,27 +242,14 @@ webApp.post('/pair', async (req, res) => {
         
         const result = await createAndPair(authDir, state, saveCreds, version, cleanNumber)
         
-        // Wait for WhatsApp to accept the pairing code (up to 2 minutes)
-        let realSessionId = null
-        try {
-            realSessionId = await Promise.race([
-                result.waitForSession,
-                new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 120000))
-            ])
-        } catch (e) {
-            console.log(chalk.red(`[PAIRING] WhatsApp did not accept code: ${e.message}`))
-            // Don't return fake session ID
-        }
-
-        // Only return Session ID if WhatsApp actually connected
+        // Return pairing code immediately - session will be polled separately
         res.json({
             success: true,
             code: result.code,
-            sessionId: realSessionId ? `MOMO-XMD~${realSessionId}` : null,
-            sessionReady: !!realSessionId,
-            message: realSessionId 
-                ? 'Pairing successful! Your SESSION_ID is ready.' 
-                : 'Pairing code sent! Enter it in WhatsApp → Linked Devices. Wait for session to be ready.'
+            sessionKey: result.sessionKey,
+            sessionId: null,
+            sessionReady: false,
+            message: 'Pairing code generated! Enter it in WhatsApp → Linked Devices. Session ID will appear after WhatsApp accepts.'
         })
 
     } catch (error) {
@@ -252,16 +259,41 @@ webApp.post('/pair', async (req, res) => {
             message: error.message || 'Pairing failed. Please try again.'
         })
     } finally {
-        setTimeout(() => {
-            try {
-                const dirs = fs.readdirSync(__dirname)
-                dirs.filter(d => d.startsWith('auth_pairing_')).forEach(d => {
-                    fs.rmSync(path.join(__dirname, d), { recursive: true, force: true })
-                })
-            } catch (e) {}
-        }, 30000)
-        
         release()
+    }
+})
+
+// ===== SESSION STATUS CHECK ENDPOINT =====
+webApp.get('/session-status/:sessionKey', async (req, res) => {
+    const { sessionKey } = req.params
+    const session = activeSessions.get(sessionKey)
+    
+    if (!session) {
+        return res.json({ 
+            sessionReady: false, 
+            sessionId: null, 
+            message: 'Session not found or expired' 
+        })
+    }
+    
+    if (session.status === 'connected' && session.sessionId) {
+        // Session is ready
+        res.json({
+            sessionReady: true,
+            sessionId: `MOMO-XMD~${session.sessionId}`,
+            message: 'Pairing successful! Your SESSION_ID is ready.'
+        })
+        
+        // Clean up after sending
+        setTimeout(() => activeSessions.delete(sessionKey), 30000)
+    } else {
+        // Still waiting
+        res.json({
+            sessionReady: false,
+            sessionId: null,
+            status: session.status,
+            message: 'Waiting for WhatsApp to accept pairing code...'
+        })
     }
 })
 
