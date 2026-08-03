@@ -44,12 +44,19 @@ webApp.get('/health', (req, res) => {
 const msgRetryCounterCache = new NodeCache()
 const pairingMutex = new Mutex()
 
-async function createSocket(authDir, state, saveCreds, version, phoneNumber) {
+/**
+ * Create socket and wait for WhatsApp to ACCEPT the pairing code.
+ * Only returns Session ID after WhatsApp connection is "open".
+ * Returns pairing code immediately (for user to enter on phone).
+ * Returns real session only after WhatsApp confirms.
+ */
+async function createAndPair(authDir, state, saveCreds, version, phoneNumber) {
     return new Promise((resolve, reject) => {
         let done = false
         let sock = null
         let pairingCode = null
         let sessionBase64 = null
+        let connectionOpen = false
 
         const socketOptions = {
             version,
@@ -63,99 +70,123 @@ async function createSocket(authDir, state, saveCreds, version, phoneNumber) {
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             syncFullHistory: false,
-            connectTimeoutMs: 30000,
+            connectTimeoutMs: 60000,
             retryRequestDelayMs: 2000,
             maxMsgRetryCount: 5
         }
 
         sock = makeWASocket(socketOptions)
 
+        // Save credentials on update
         sock.ev.on('creds.update', async () => {
             try { await saveCreds() } catch (e) {}
         })
 
+        // Overall timeout (2 minutes for WhatsApp to accept)
         const timeout = setTimeout(() => {
             if (!done) {
                 done = true
+                console.log(chalk.red('[PAIRING] TIMEOUT - WhatsApp did not accept code'))
                 try { sock.end(new Error('Timeout')) } catch (e) {}
-                reject(new Error('Connection timeout - please try again'))
+                reject(new Error('Timeout'))
             }
-        }, 45000)
+        }, 120000)
 
         sock.ev.on('connection.update', async (update) => {
             if (done) return
 
-            const { connection, qr } = update
+            const { connection, qr, lastDisconnect } = update
 
-            if ((connection === 'connecting' || qr) && !done) {
+            // When connecting or QR appears, request pairing code
+            if ((connection === 'connecting' || qr) && !done && !pairingCode) {
                 try {
-                    done = true
-                    clearTimeout(timeout)
                     console.log(chalk.cyan(`[PAIRING] Requesting code for: ${phoneNumber}`))
-
                     pairingCode = await sock.requestPairingCode(phoneNumber)
                     
                     if (!pairingCode) {
-                        throw new Error('Failed to get pairing code')
+                        done = true
+                        clearTimeout(timeout)
+                        reject(new Error('Failed to get pairing code'))
+                        return
                     }
 
                     console.log(chalk.green(`[PAIRING] Code generated: ${pairingCode}`))
-
-                    // Save creds
+                    console.log(chalk.yellow('[PAIRING] Waiting for WhatsApp to accept...'))
+                    
                     try { await saveCreds() } catch (e) {}
 
-                    // Wait then collect session
-                    setTimeout(async () => {
-                        done = true
-                        clearTimeout(timeout)
-                        
-                        try {
-                            const credsFile = path.join(authDir, 'creds.json')
-                            if (fs.existsSync(credsFile)) {
-                                const credsContent = fs.readFileSync(credsFile, 'utf-8')
-                                sessionBase64 = Buffer.from(credsContent).toString('base64')
-                            }
-                        } catch (e) {}
-
-                        if (!sessionBase64) {
-                            sessionBase64 = Buffer.from(JSON.stringify({
-                                pairingCode: pairingCode,
-                                phoneNumber: phoneNumber,
-                                timestamp: Date.now(),
-                                bot: 'MOMO-XMD'
-                            })).toString('base64')
-                        }
-
-                        const sessionId = `MOMO-XMD~${sessionBase64}`
-                        resolve({ code: pairingCode, sessionId, phoneNumber })
-                        
-                        try { sock.end(new Error('Done')) } catch (e) {}
-                    }, 10000)
+                    // Return pairing code immediately (user needs to enter it on phone)
+                    // But also resolve when WhatsApp connects
+                    resolve({ 
+                        code: pairingCode, 
+                        resolveSession: () => sessionBase64,
+                        waitForSession: new Promise((resSession, rejSession) => {
+                            // Session will be resolved when connection opens
+                            const checkSession = setInterval(() => {
+                                if (connectionOpen && sessionBase64) {
+                                    clearInterval(checkSession)
+                                    clearTimeout(sessionTimeout)
+                                    resSession(sessionBase64)
+                                }
+                            }, 2000)
+                            
+                            const sessionTimeout = setTimeout(() => {
+                                clearInterval(checkSession)
+                                rejSession(new Error('WhatsApp did not accept the pairing code within 2 minutes'))
+                            }, 120000)
+                        })
+                    })
 
                 } catch (err) {
-                    console.error(chalk.red(`[PAIRING] Error: ${err.message}`))
-                    reject(err)
+                    if (!done) {
+                        done = true
+                        clearTimeout(timeout)
+                        reject(err)
+                    }
                 }
             }
 
-            if (connection === 'close') {
-                if (!done) {
-                    done = true
-                    clearTimeout(timeout)
-                    const lastDisconnect = sock.ws?.lastDisconnect
-                    reject(new Error('Connection Closed: ' + (lastDisconnect?.error?.output?.payload?.statusCode || '')))
-                }
-            }
-
+            // When WhatsApp accepts the code, connection becomes "open"
             if (connection === 'open') {
-                console.log(chalk.green('[PAIRING] WhatsApp connected!'))
+                console.log(chalk.green('[PAIRING] WhatsApp CONNECTED! Session authenticated.'))
+                connectionOpen = true
+                
                 try {
                     await saveCreds()
                     const credsFile = path.join(authDir, 'creds.json')
                     if (fs.existsSync(credsFile)) {
                         sessionBase64 = Buffer.from(fs.readFileSync(credsFile, 'utf-8')).toString('base64')
+                        console.log(chalk.green('[PAIRING] Real Session ID generated from authenticated connection'))
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.error(chalk.red(`[PAIRING] Error saving session: ${e.message}`))
+                }
+
+                // Keep connection alive for 5 more seconds then close
+                setTimeout(() => {
+                    if (!done) {
+                        done = true
+                        clearTimeout(timeout)
+                        try { sock.end(new Error('Pairing complete')) } catch (e) {}
+                    }
+                }, 5000)
+            }
+
+            // When connection closes
+            if (connection === 'close') {
+                const statusCode = lastDisconnect?.error?.output?.payload?.statusCode
+                console.log(chalk.red(`[PAIRING] Connection closed: ${statusCode}`))
+                
+                // If we have session but WhatsApp closed, it might be reconnection
+                if (connectionOpen && sessionBase64) {
+                    // Session is valid
+                }
+                
+                if (!done && statusCode === DisconnectReason.loggedOut) {
+                    done = true
+                    clearTimeout(timeout)
+                    reject(new Error('WhatsApp logged out - code was invalid'))
+                }
             }
         })
     })
@@ -189,13 +220,29 @@ webApp.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
         
-        const result = await createSocket(authDir, state, saveCreds, version, cleanNumber)
+        const result = await createAndPair(authDir, state, saveCreds, version, cleanNumber)
         
+        // Wait for WhatsApp to accept the pairing code (up to 2 minutes)
+        let realSessionId = null
+        try {
+            realSessionId = await Promise.race([
+                result.waitForSession,
+                new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 120000))
+            ])
+        } catch (e) {
+            console.log(chalk.red(`[PAIRING] WhatsApp did not accept code: ${e.message}`))
+            // Don't return fake session ID
+        }
+
+        // Only return Session ID if WhatsApp actually connected
         res.json({
             success: true,
             code: result.code,
-            sessionId: result.sessionId,
-            message: 'Pairing successful! Enter the code in WhatsApp → Linked Devices.'
+            sessionId: realSessionId ? `MOMO-XMD~${realSessionId}` : null,
+            sessionReady: !!realSessionId,
+            message: realSessionId 
+                ? 'Pairing successful! Your SESSION_ID is ready.' 
+                : 'Pairing code sent! Enter it in WhatsApp → Linked Devices. Wait for session to be ready.'
         })
 
     } catch (error) {
@@ -223,7 +270,7 @@ webApp.listen(PORT, () => {
     console.log(chalk.cyan(`\n┌─────────────────────────────────────────┐`))
     console.log(chalk.cyan(`│     MOMO-XMD Pairing Server Ready      │`))
     console.log(chalk.cyan(`│     Port: ${PORT}                             │`))
-    console.log(chalk.cyan(`│     Mode: DIRECT (IP works!)              │`))
+    console.log(chalk.cyan(`│     Mode: AUTHENTICATED (Real sessions) │`))
     console.log(chalk.cyan(`└─────────────────────────────────────────┘\n`))
 })
 
