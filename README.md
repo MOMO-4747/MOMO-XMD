@@ -5,7 +5,7 @@
 </marquee>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MOMO-4747/MOMO-XMD/main/media/momo.jpg" width="200" />
+  <img src="https://raw.githubusercontent.com/MOMO-4747/MOMO-XMD/main/media/momo_hacker.png" width="400" />
 </p>
 
 <p align="center">
