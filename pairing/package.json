@@ -1,17 +1,22 @@
 {
-  "name": "momo-xmd",
-  "version": "2.0.0",
-  "description": "MOMO XMD - WhatsApp Bot",
-  "main": "main.js",
+  "name": "momo-xmd-pairing",
+  "version": "2.7.0",
+  "description": "MOMO-XMD WhatsApp Pairing Server",
+  "main": "server.js",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
-    "start": "node main.js"
+    "start": "node server.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "latest",
     "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "6.7.22",
+    "async-mutex": "^0.5.0",
     "chalk": "^4.1.2",
     "express": "^4.18.2",
+    "node-cache": "^5.1.2",
     "pino": "^8.17.0",
-    "node-cache": "^5.1.2"
+    "qrcode": "^1.5.3"
   }
 }

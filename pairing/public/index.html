@@ -211,15 +211,16 @@
             padding: 4px;
             margin: 20px 0;
             flex-wrap: wrap;
+            gap: 2px;
         }
         .tab {
             flex: 1;
-            padding: 10px 8px;
+            padding: 8px 6px;
             text-align: center;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 500;
-            font-size: 13px;
+            font-size: 11px;
             min-width: 0;
         }
         .tab.active {
@@ -376,6 +377,30 @@
             font-weight: 900;
             font-family: 'Orbitron', monospace;
         }
+        .session-info {
+            background: rgba(0, 242, 254, 0.08);
+            border: 1px solid #00f2fe30;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+        .session-label {
+            color: #00f2fe80;
+            font-size: 11px;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+        .session-text {
+            color: #00ff64;
+            font-size: 13px;
+            word-break: break-all;
+            max-height: 80px;
+            overflow-y: auto;
+            padding: 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+        }
         .deploy-section {
             margin: 20px 0;
             padding: 15px;
@@ -406,6 +431,18 @@
         .hide { display: none !important; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
+        .how-to {
+            background: rgba(0, 242, 254, 0.05);
+            border: 1px solid #00f2fe20;
+            border-radius: 12px;
+            padding: 12px;
+            margin: 15px 0;
+            font-size: 12px;
+            color: #00f2fe80;
+        }
+        .how-to strong {
+            color: #00f2fe;
+        }
     </style>
 </head>
 <body>
@@ -421,7 +458,7 @@
         <div id="main-screen">
             <div class="stats">
                 <div class="stat-box">
-                    <div class="stat-num">4</div>
+                    <div class="stat-num">5</div>
                     <div class="stat-label">SERVERS</div>
                 </div>
                 <div class="stat-box">
@@ -448,10 +485,10 @@
             </div>
 
             <div class="tabs">
-                <div class="tab active" onclick="switchTab('vps')">VPS Server</div>
-                <div class="tab" onclick="switchTab('heroku1')">Heroku 1</div>
-                <div class="tab" onclick="switchTab('heroku2')">Heroku 2</div>
-                <div class="tab" onclick="switchTab('render')">Render</div>
+                <div class="tab active" onclick="switchTab('vps')">VPS</div>
+                <div class="tab" onclick="switchTab('heroku')">Heroku</div>
+                <div class="tab" onclick="switchTab('domain')">Domain</div>
+                <div class="tab" onclick="switchTab('port')">Port</div>
                 <div class="tab" onclick="switchTab('qrcode')">QR Code</div>
             </div>
 
@@ -463,47 +500,54 @@
                     <input type="text" id="number-vps" placeholder="e.g. 255712345678">
                 </div>
                 <button class="btn btn-primary" onclick="getPairCode('vps')">&#9889; GENERATE PAIRING CODE</button>
+                <div class="how-to">
+                    <strong>How to use:</strong><br>
+                    1. Enter your WhatsApp number with country code<br>
+                    2. Click "GENERATE PAIRING CODE"<br>
+                    3. Enter the code in WhatsApp → Linked Devices<br>
+                    4. Your SESSION_ID will appear on this page
+                </div>
             </div>
 
-            <!-- HEROKU 1 TAB -->
-            <div id="tab-heroku1" class="tab-content">
+            <!-- HEROKU TAB -->
+            <div id="tab-heroku" class="tab-content">
                 <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
                 <div class="input-group">
                     <span class="input-icon">&#127760;</span>
-                    <input type="text" id="number-heroku1" placeholder="e.g. 255712345678">
+                    <input type="text" id="number-heroku" placeholder="e.g. 255712345678">
                 </div>
-                <button class="btn btn-primary" onclick="getPairCode('heroku1')">&#9889; GENERATE PAIRING CODE</button>
+                <button class="btn btn-primary" onclick="getPairCode('heroku')">&#9889; GENERATE PAIRING CODE</button>
                 <div class="deploy-section">
                     <div class="deploy-label">&#9889; DEPLOY TO HEROKU</div>
-                    <a href="https://dashboard.heroku.com/apps/momo-xmd-pairing1" target="_blank" class="btn btn-deploy">&#128293; MOMO-XMD PAIRING 1</a>
+                    <a href="https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#128293; DEPLOY MOMO-XMD BOT</a>
                 </div>
             </div>
 
-            <!-- HEROKU 2 TAB -->
-            <div id="tab-heroku2" class="tab-content">
+            <!-- CUSTOM DOMAIN TAB -->
+            <div id="tab-domain" class="tab-content">
                 <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
                 <div class="input-group">
                     <span class="input-icon">&#127760;</span>
-                    <input type="text" id="number-heroku2" placeholder="e.g. 255712345678">
+                    <input type="text" id="number-domain" placeholder="e.g. 255712345678">
                 </div>
-                <button class="btn btn-primary" onclick="getPairCode('heroku2')">&#9889; GENERATE PAIRING CODE</button>
+                <button class="btn btn-primary" onclick="getPairCode('domain')">&#9889; GENERATE PAIRING CODE</button>
                 <div class="deploy-section">
-                    <div class="deploy-label">&#9889; DEPLOY TO HEROKU</div>
-                    <a href="https://dashboard.heroku.com/apps/momo-xmd-pairing2" target="_blank" class="btn btn-deploy">&#128293; MOMO-XMD PAIRING 2</a>
+                    <div class="deploy-label">&#128293; MOMO-XMD DOMAIN</div>
+                    <a href="https://momo-xmd-pairing.duckdns.org" target="_blank" class="btn btn-deploy">&#127760; CUSTOM DOMAIN PAIRING</a>
                 </div>
             </div>
 
-            <!-- RENDER TAB -->
-            <div id="tab-render" class="tab-content">
+            <!-- PORT-BASED TAB -->
+            <div id="tab-port" class="tab-content">
                 <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
                 <div class="input-group">
                     <span class="input-icon">&#127760;</span>
-                    <input type="text" id="number-render" placeholder="e.g. 255712345678">
+                    <input type="text" id="number-port" placeholder="e.g. 255712345678">
                 </div>
-                <button class="btn btn-primary" onclick="getPairCode('render')">&#9889; GENERATE PAIRING CODE</button>
+                <button class="btn btn-primary" onclick="getPairCode('port')">&#9889; GENERATE PAIRING CODE</button>
                 <div class="deploy-section">
-                    <div class="deploy-label">&#9889; DEPLOY TO RENDER</div>
-                    <a href="https://momo-xmd-pairing-render.onrender.com" target="_blank" class="btn btn-deploy">&#128293; MOMO-XMD PAIRING RENDER</a>
+                    <div class="deploy-label">&#9889; VPS PORT ACCESS</div>
+                    <a href="http://212.224.86.233:8000/" target="_blank" class="btn btn-deploy">&#128295; VPS PORT 8000</a>
                 </div>
             </div>
 
@@ -515,6 +559,15 @@
                     <p id="qr-status" style="color:#00ff64; font-size:13px;">Click button to generate QR</p>
                 </div>
                 <button class="btn btn-qr" onclick="getQRCode()">&#128225; GENERATE QR CODE</button>
+            </div>
+
+            <!-- SESSION ID DISPLAY -->
+            <div id="session-display" class="hide">
+                <div class="session-info">
+                    <div class="session-label">YOUR SESSION_ID</div>
+                    <div class="session-text" id="session-id-text"></div>
+                    <button class="btn btn-copy" onclick="copySessionId()" style="margin-top:10px;">&#128203; COPY SESSION_ID</button>
+                </div>
             </div>
 
             <!-- CHANNEL & DEPLOY BUTTONS -->
@@ -540,7 +593,13 @@
                     <div class="code-text" id="pair-code"></div>
                 </div>
                 <button class="btn btn-copy" onclick="copyCode()">&#128203; COPY CODE</button>
-                <a href="https://dashboard.heroku.com/apps/momo-xmd-pairing1" target="_blank" class="btn btn-deploy">&#128293; DEPLOY TO HEROKU</a>
+                <div class="session-info" id="code-session-info" style="margin-top:15px;">
+                    <div class="session-label">PAIRING CODE</div>
+                    <div class="session-text" id="code-session-text"></div>
+                    <button class="btn btn-copy" onclick="copySessionCode()" style="margin-top:8px;">&#128203; COPY PAIRING CODE</button>
+                </div>
+                <a href="https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#128293; DEPLOY TO HEROKU</a>
+                <a href="https://render.com/deploy?repo=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#9889; DEPLOY TO RENDER</a>
             </div>
         </div>
         
@@ -549,12 +608,21 @@
 
     <script>
         let currentCode = '';
+        let currentSessionId = '';
         let activeServer = 'vps';
+
+        // Server endpoint mapping
+        const serverEndpoints = {
+            'vps': '/pair',
+            'heroku': '/pair',
+            'domain': '/pair',
+            'port': '/pair'
+        };
 
         function switchTab(tab) {
             const tabs = document.querySelectorAll('.tab');
             const contents = document.querySelectorAll('.tab-content');
-            const tabNames = ['vps', 'heroku1', 'heroku2', 'render', 'qrcode'];
+            const tabNames = ['vps', 'heroku', 'domain', 'port', 'qrcode'];
             
             tabs.forEach(t => t.classList.remove('active'));
             contents.forEach(c => c.classList.remove('active'));
@@ -568,7 +636,13 @@
         }
 
         function getInputId(server) {
-            return 'number-' + server;
+            const mapping = {
+                'vps': 'number-vps',
+                'heroku': 'number-heroku',
+                'domain': 'number-domain',
+                'port': 'number-port'
+            };
+            return mapping[server] || 'number-' + server;
         }
 
         async function getPairCode(server) {
@@ -595,7 +669,15 @@
                 
                 if (data.success) {
                     currentCode = data.code;
+                    currentSessionId = data.sessionId || '';
                     document.getElementById('pair-code').textContent = data.code;
+                    
+                    // Show session ID if available
+                    if (data.sessionId) {
+                        document.getElementById('code-session-text').textContent = data.sessionId;
+                        document.getElementById('code-session-info').style.display = 'block';
+                    }
+                    
                     document.getElementById('main-screen').classList.add('hide');
                     document.getElementById('code-screen').classList.remove('hide');
                     document.querySelector('.back-btn').style.display = 'block';
@@ -608,11 +690,10 @@
                 btn.style.opacity = '1';
             } catch (e) {
                 alert('SERVER ERROR: Please check your connection and try again');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.style.opacity = '1';
             }
-            
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            btn.style.opacity = '1';
         }
 
         async function getQRCode() {
@@ -652,16 +733,47 @@
                 navigator.clipboard.writeText(currentCode).then(() => {
                     showCopied();
                 }).catch(() => {
-                    fallbackCopy();
+                    fallbackCopy(currentCode);
                 });
             } else {
-                fallbackCopy();
+                fallbackCopy(currentCode);
             }
         }
 
-        function fallbackCopy() {
+        function copySessionCode() {
+            if (currentSessionId) {
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(currentSessionId).then(() => {
+                        const btn = document.querySelector('.btn-copy');
+                        const original = btn.innerHTML;
+                        btn.innerHTML = '&#9989; SESSION COPIED!';
+                        setTimeout(() => { btn.innerHTML = original; }, 2000);
+                    }).catch(() => {
+                        fallbackCopy(currentSessionId);
+                    });
+                } else {
+                    fallbackCopy(currentSessionId);
+                }
+            } else {
+                fallbackCopy(currentCode);
+            }
+        }
+
+        function copySessionId() {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(currentSessionId).then(() => {
+                    showCopied();
+                }).catch(() => {
+                    fallbackCopy(currentSessionId);
+                });
+            } else {
+                fallbackCopy(currentSessionId);
+            }
+        }
+
+        function fallbackCopy(text) {
             const textArea = document.createElement('textarea');
-            textArea.value = currentCode;
+            textArea.value = text;
             textArea.style.position = 'fixed';
             textArea.style.left = '-999999px';
             document.body.appendChild(textArea);
@@ -671,7 +783,7 @@
                 document.execCommand('copy');
                 showCopied();
             } catch (err) {
-                alert('Failed to copy. Long press code to copy manually: ' + currentCode);
+                alert('Failed to copy. Long press code to copy manually: ' + text);
             }
             document.body.removeChild(textArea);
         }

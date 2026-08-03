@@ -1,6 +1,11 @@
 const express = require('express')
 const path = require('path')
-const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys')
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore
+} = require('@whiskeysockets/baileys')
 const QRCode = require('qrcode')
 const pino = require('pino')
 const NodeCache = require('node-cache')
@@ -49,8 +54,8 @@ app.post('/pair', async (req, res) => {
     const release = await mutex.acquire()
     
     try {
-        // Create temporary auth directory
-        const authDir = path.join(__dirname, 'auth_info_pairing')
+        // Create temporary auth directory with unique name
+        const authDir = path.join(__dirname, 'auth_info_' + Date.now())
         if (fs.existsSync(authDir)) {
             fs.rmSync(authDir, { recursive: true, force: true })
         }
@@ -59,7 +64,7 @@ app.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
-        // Create socket
+        // Create socket - try connecting directly without proxy
         const sock = makeWASocket({
             version,
             auth: {
@@ -71,7 +76,10 @@ app.post('/pair', async (req, res) => {
             browser: ['MOMO-XMD', 'Chrome', '120.0.0'],
             markOnlineOnConnect: true,
             msgRetryCounterCache,
-            syncFullHistory: false
+            syncFullHistory: false,
+            connectTimeoutMs: 30000,
+            retryRequestDelayMs: 2000,
+            maxMsgRetryCount: 5
         })
 
         // Save creds on update
@@ -91,28 +99,33 @@ app.post('/pair', async (req, res) => {
                 console.log('[PAIRING] Connected successfully!')
                 
                 try {
-                    // Send session info to user
-                    const credsData = fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8');
-                    const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`;
-                    await sock.sendMessage(sock.user.id, {
-                        text: `*✅ MOMO-XMD Connected!*\n\n` +
-                              `📱 Session ID:\n${sessionId}\n\n` +
-                              `🔗 Channel: https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H\n\n` +
-                              `💬 Support: https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U`
-                    })
+                    // Save credentials
+                    await saveCreds()
+                    await new Promise(r => setTimeout(r, 2000))
+                    
+                    const credsFile = path.join(authDir, 'creds.json')
+                    if (fs.existsSync(credsFile)) {
+                        const credsData = fs.readFileSync(credsFile, 'utf-8')
+                        const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`
+                        await sock.sendMessage(sock.user.id, {
+                            text: `*MOMO-XMD Connected!*\n\n` +
+                                  `Your SESSION_ID:\n${sessionId}\n\n` +
+                                  `Channel: https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H`
+                        })
+                    }
                 } catch (e) {
                     console.error('[PAIRING] Error sending message:', e.message)
                 }
 
                 // Wait then end
                 setTimeout(() => {
-                    sock.end(new Error('Session completed'))
-                    // Clean up
+                    try { sock.end(new Error('Session completed')) } catch (e) {}
+                    // Clean up after delay
                     setTimeout(() => {
                         if (fs.existsSync(authDir)) {
-                            fs.rmSync(authDir, { recursive: true, force: true })
+                            try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
                         }
-                    }, 3000)
+                    }, 5000)
                 }, 5000)
             }
 
@@ -121,7 +134,7 @@ app.post('/pair', async (req, res) => {
                 console.log('[PAIRING] Connection closed, reason:', reason)
                 
                 if (reason !== 408 && reason !== 428) {
-                    sock.end(undefined)
+                    try { sock.end(undefined) } catch (e) {}
                 }
             }
         })
@@ -133,10 +146,10 @@ app.post('/pair', async (req, res) => {
             const timeout = setTimeout(() => {
                 if (!resolved) {
                     resolved = true
-                    sock.end(new Error('Timeout'))
-                    reject(new Error('Timeout waiting for pairing code'))
+                    try { sock.end(new Error('Timeout')) } catch (e) {}
+                    reject(new Error('Timeout waiting for pairing code - please try again'))
                 }
-            }, 30000)
+            }, 45000)
 
             sock.ev.on('connection.update', async (update) => {
                 if (resolved) return
@@ -152,7 +165,7 @@ app.post('/pair', async (req, res) => {
                         if (!resolved) {
                             resolved = true
                             clearTimeout(timeout)
-                            sock.end(new Error('Failed to get code'))
+                            try { sock.end(new Error('Failed to get code')) } catch (e) {}
                             reject(err)
                         }
                     }
@@ -160,10 +173,20 @@ app.post('/pair', async (req, res) => {
             })
         })
 
+        // Generate proper SESSION_ID with base64 encoded pairing data
+        const sessionData = JSON.stringify({
+            pairingCode: pairCode,
+            phoneNumber: cleanNumber,
+            timestamp: Date.now(),
+            bot: 'MOMO-XMD'
+        })
+        const sessionId = `MOMO-XMD~${Buffer.from(sessionData).toString('base64')}`
+
         return res.json({
             success: true,
             code: pairCode,
-            message: 'Pairing code generated successfully'
+            sessionId: sessionId,
+            message: 'Pairing code generated successfully! Enter this code in WhatsApp.'
         })
 
     } catch (error) {
@@ -180,7 +203,7 @@ app.post('/pair', async (req, res) => {
 
 // ===== QR CODE ENDPOINT =====
 app.get('/qr', async (req, res) => {
-    const authDir = path.join(__dirname, 'auth_info_qr')
+    const authDir = path.join(__dirname, 'auth_info_qr_' + Date.now())
     
     if (fs.existsSync(authDir)) {
         fs.rmSync(authDir, { recursive: true, force: true })
@@ -227,21 +250,28 @@ app.get('/qr', async (req, res) => {
 
             if (connection === 'open') {
                 console.log('[QR] Connected!')
-                const credsData = fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8');
-                const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`;
-                await sock.sendMessage(sock.user.id, { text: sessionId });
-                sock.end(new Error('QR scan completed'))
+                try {
+                    await saveCreds()
+                    await new Promise(r => setTimeout(r, 2000))
+                    const credsFile = path.join(authDir, 'creds.json')
+                    if (fs.existsSync(credsFile)) {
+                        const credsData = fs.readFileSync(credsFile, 'utf-8')
+                        const sessionId = `MOMO-XMD~${Buffer.from(credsData).toString('base64')}`
+                        await sock.sendMessage(sock.user.id, { text: sessionId })
+                    }
+                } catch (e) {}
+                try { sock.end(new Error('QR scan completed')) } catch (e) {}
                 setTimeout(() => {
                     if (fs.existsSync(authDir)) {
-                        fs.rmSync(authDir, { recursive: true, force: true })
+                        try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
                     }
                 }, 3000)
             }
 
             if (connection === 'close') {
-                sock.end(undefined)
+                try { sock.end(undefined) } catch (e) {}
                 if (fs.existsSync(authDir)) {
-                    fs.rmSync(authDir, { recursive: true, force: true })
+                    try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
                 }
             }
         })
@@ -250,9 +280,9 @@ app.get('/qr', async (req, res) => {
             if (!res.headersSent) {
                 res.json({ success: false, message: 'QR expired. Please try again.' })
             }
-            sock.end(new Error('QR timeout'))
+            try { sock.end(new Error('QR timeout')) } catch (e) {}
             if (fs.existsSync(authDir)) {
-                fs.rmSync(authDir, { recursive: true, force: true })
+                try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
             }
         }, 60000)
 
@@ -268,7 +298,7 @@ app.get('/status', (req, res) => {
     res.json({
         status: 'online',
         bot: 'MOMO-XMD',
-        version: '1.9.9',
+        version: '2.7.0',
         uptime: process.uptime(),
         timestamp: new Date().toISOString()
     })
@@ -276,7 +306,7 @@ app.get('/status', (req, res) => {
 
 // ===== HEALTH CHECK =====
 app.get('/health', (req, res) => {
-    res.json({ status: 'OK', bot: 'MOMO-XMD', version: '1.9.9' })
+    res.json({ status: 'OK', bot: 'MOMO-XMD', version: '2.7.0' })
 })
 
 // Handle EPIPE errors

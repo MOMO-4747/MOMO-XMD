@@ -7,8 +7,9 @@
   "success_url": "/",
   "env": {
     "SESSION_ID": {
-      "description": "Paste your SESSION_ID from pairing server here",
-      "required": true
+      "description": "Paste your SESSION_ID from pairing server here. Get it from: https://momo-xmd-pairing-fa35bd7082ba.herokuapp.com/ or http://212.224.86.233:8000/",
+      "required": true,
+      "value": ""
     },
     "OWNER_NUMBER": {
       "description": "Owner phone number (e.g. 255760298574)",
