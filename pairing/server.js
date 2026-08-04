@@ -48,7 +48,7 @@ app.post('/pair', async (req, res) => {
     if (!number) return res.status(400).json({ success: false, message: 'Number required' })
     
     let cleanNumber = String(number).replace(/[^0-9]/g, '')
-    console.log(`\n[REQUEST] New pairing request for: ${cleanNumber}`)
+    console.log(`\n[PAIRING_START] Request for: ${cleanNumber}`)
 
     const release = await mutex.acquire()
     const sessionKey = 'momo_' + Date.now()
@@ -64,23 +64,24 @@ app.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
-        console.log(`[BAILEYS] Version: ${version.join('.')}`)
+        console.log(`[INFO] Baileys Version: ${version.join('.')}`)
 
         const sock = makeWASocket({
             version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'info' }))
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
             },
             printQRInTerminal: false,
-            logger: pino({ level: 'info' }),
-            browser: ["Ubuntu", "Chrome", "121.0.6167.85"],
+            logger: pino({ level: 'fatal' }),
+            // User requested Firefox and suggested Ubuntu 20.0.04
+            browser: ["Ubuntu", "Firefox", "20.0.04"], 
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 10000,
-            shouldSyncHistoryMessage: () => false // Speed up connection
+            shouldSyncHistoryMessage: () => false
         })
 
         sock.ev.on('creds.update', saveCreds)
@@ -89,12 +90,12 @@ app.post('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update
             
             if (connection) {
-                console.log(`[CONN_UPDATE] State: ${connection} for ${cleanNumber}`)
+                console.log(`[STATE] ${cleanNumber} -> ${connection}`)
                 sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection })
             }
 
             if (connection === 'open') {
-                console.log(`[SUCCESS] ${cleanNumber} IS NOW CONNECTED!`)
+                console.log(`[SUCCESS] ${cleanNumber} CONNECTED!`)
                 await new Promise(r => setTimeout(r, 2000))
                 await saveCreds()
                 
@@ -109,9 +110,9 @@ app.post('/pair', async (req, res) => {
                         await sock.sendMessage(userId, { 
                             text: `*✅ MOMO-XMD Connected!*\n\n*Session ID:*\n\n${sessionId}\n\n_Copy this ID and use it in your bot configuration._` 
                         })
-                        console.log(`[MSG] Session ID sent to user.`)
+                        console.log(`[MSG] Session ID sent to WhatsApp inbox.`)
                     } catch (e) {
-                        console.log(`[MSG_ERR] Failed to send: ${e.message}`)
+                        console.log(`[MSG_ERR] ${e.message}`)
                     }
                 }
 
@@ -124,29 +125,25 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
                 console.log(`[CLOSED] ${cleanNumber} Reason: ${reason}`)
-                
                 if (reason === DisconnectReason.loggedOut) {
-                    sessions.set(sessionKey, { status: 'error', error: 'Logged out from device.' })
-                } else if (reason !== DisconnectReason.restartRequired) {
-                    // Log other reasons for debugging
-                    console.log(`[DEBUG] Disconnect detail:`, lastDisconnect?.error)
+                    sessions.set(sessionKey, { status: 'error', error: 'Logged out.' })
                 }
             }
         })
 
-        // Request pairing code
+        // Request pairing code after 3 seconds
         setTimeout(async () => {
             try {
                 if (isResolved) return
-                console.log(`[ACTION] Fetching code for ${cleanNumber}...`)
+                console.log(`[CODE_REQ] Requesting for ${cleanNumber}...`)
                 let code = await sock.requestPairingCode(cleanNumber)
                 if (code && !isResolved) {
                     isResolved = true
-                    console.log(`[CODE] Success: ${code}`)
+                    console.log(`[CODE_GEN] Code: ${code}`)
                     res.json({ success: true, code: code, sessionKey })
                 }
             } catch (err) {
-                console.log(`[ERROR] Request failed: ${err.message}`)
+                console.log(`[CODE_ERR] ${err.message}`)
                 if (!isResolved) {
                     isResolved = true
                     res.status(500).json({ success: false, message: 'WhatsApp rejected request. Try again.' })
@@ -154,15 +151,16 @@ app.post('/pair', async (req, res) => {
             }
         }, 3000)
 
-        // Safety timeout for the entire request
+        // Safety timeout
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true
-                res.status(500).json({ success: false, message: 'Timeout. Please refresh.' })
+                res.status(500).json({ success: false, message: 'Timeout. Please try again.' })
             }
         }, 25000)
 
     } catch (error) {
+        console.log(`[FATAL_ERR] ${error.message}`)
         if (!isResolved) {
             isResolved = true
             sessions.set(sessionKey, { status: 'error', error: error.message })
