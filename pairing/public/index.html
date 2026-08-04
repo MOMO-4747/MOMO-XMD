@@ -3,933 +3,327 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MOMO-XMD Pairing</title>
+    <title>MOMO-XMD Cyber Pairing</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            background: #0a0e1a; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
+        body {
+            background: #0a0e1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
             font-family: 'Rajdhani', sans-serif;
             padding: 20px;
             color: #00f2fe;
+            overflow-x: hidden;
         }
-        .marquee {
-            position: fixed;
-            top: 0;
-            left: 0;
+        .container {
             width: 100%;
-            background: linear-gradient(90deg, rgba(0,242,254,0.1), rgba(0,242,254,0.2), rgba(0,242,254,0.1));
-            border-bottom: 2px solid #00f2fe;
-            padding: 12px 0;
-            overflow: hidden;
-            z-index: 1000;
-            box-shadow: 0 0 30px #00f2fe50;
-        }
-        .marquee-content {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: scroll-left 15s linear infinite;
-        }
-        .marquee-logo {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 22px;
-            font-weight: 900;
-            color: #00f2fe;
-            text-shadow: 0 0 15px #00f2fe, 0 0 30px #00f2fe;
-            letter-spacing: 3px;
-            position: relative;
-            padding: 0 40px;
-        }
-        .marquee-logo::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent);
-            animation: short-shine 3s linear infinite;
-        }
-        @keyframes scroll-left {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
-        }
-        @keyframes short-shine {
-            0% { left: -100%; }
-            100% { left: 200%; }
-        }
-        .container { 
-            width: 100%;
-            max-width: 420px;
-            background: rgba(10, 14, 26, 0.8);
+            max-width: 450px;
+            background: rgba(10, 14, 26, 0.9);
             border: 1px solid #00f2fe30;
             border-radius: 20px;
-            padding: 25px;
-            box-shadow: 0 0 40px #00f2fe20;
+            padding: 30px;
+            box-shadow: 0 0 50px #00f2fe20, inset 0 0 20px #00f2fe10;
             backdrop-filter: blur(10px);
-            margin-top: 65px;
-        }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 25px;
-        }
-        .stat-box {
-            background: rgba(0, 242, 254, 0.05);
-            border: 1px solid #00f2fe30;
-            border-radius: 12px;
-            padding: 12px 5px;
-            text-align: center;
-        }
-        .stat-num { 
-            font-family: 'Orbitron', sans-serif;
-            font-size: 20px; 
-            font-weight: 700;
-            color: #00f2fe;
-            text-shadow: 0 0 10px #00f2fe;
-        }
-        .stat-label { 
-            font-size: 10px; 
-            color: #00f2fe80;
-            margin-top: 4px;
-            letter-spacing: 1px;
+            position: relative;
+            z-index: 1;
         }
         .logo-section {
             text-align: center;
-            margin: 20px 0;
-            position: relative;
+            margin-bottom: 30px;
         }
         .logo {
-            width: 150px; height: 150px; border-radius: 50%;
-            margin: 0 auto 15px;
+            width: 180px; height: 180px; border-radius: 50%;
+            margin: 0 auto 20px;
             position: relative;
             display: flex; justify-content: center; align-items: center;
-        }
-        .logo-ring {
-            position: absolute;
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            background: conic-gradient(from 0deg, transparent, #00f2fe, transparent, transparent);
-            animation: rotate 2s linear infinite;
-        }
-        .logo img { 
-            width: 130px; height: 130px; border-radius: 50%; 
-            position: relative;
-            z-index: 5;
-            background: #000;
+            background: linear-gradient(45deg, #00f2fe, #00ff64);
             padding: 5px;
-            box-shadow: 0 0 30px #00f2fe, inset 0 0 20px #00f2fe30;
+            box-shadow: 0 0 40px #00f2fe, 0 0 80px #00ff64;
         }
-        .skull-eyes {
-            position: absolute;
-            width: 130px;
-            height: 130px;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 6;
-            pointer-events: none;
+        .logo img {
+            width: 100%; height: 100%; border-radius: 50%;
+            object-fit: cover;
+            background: #0a0e1a;
+            padding: 5px;
         }
-        .eye {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background: #ff0000;
-            border-radius: 50%;
-            box-shadow: 0 0 15px #ff0000, 0 0 30px #ff0000, 0 0 45px #ff0000;
-            animation: blink-eye 1.5s infinite;
-        }
-        .eye.left { top: 44%; left: 36%; }
-        .eye.right { top: 44%; left: 64%; }
-        @keyframes rotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        @keyframes blink-eye {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.8); }
-        }
-        .title { 
+        h1 {
             font-family: 'Orbitron', sans-serif;
-            font-size: 32px; 
-            font-weight: 900;
-            letter-spacing: 3px;
-            position: relative;
-            display: inline-block;
+            font-size: 2.2em;
             color: #00f2fe;
-            text-shadow: 0 0 20px #00f2fe, 0 0 40px #00f2fe;
-            overflow: hidden;
+            text-shadow: 0 0 15px #00f2fe, 0 0 30px #00ff64;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
         }
-        .title::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(0,242,254,0.8), transparent);
-            animation: text-shine 2s linear infinite;
-        }
-        @keyframes text-shine {
-            0% { left: -100%; }
-            100% { left: 100%; }
-        }
-        .status {
-            display: inline-block;
-            background: rgba(0, 255, 100, 0.1);
-            border: 1px solid #00ff64;
+        p {
+            font-size: 1.1em;
             color: #00ff64;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            margin: 10px 0 20px;
-            text-shadow: 0 0 10px #00ff64;
+            margin-bottom: 25px;
         }
-        .back-btn {
-            background: rgba(0, 242, 254, 0.1);
-            border: 1px solid #00f2fe30;
-            color: #00f2fe;
-            padding: 10px 20px;
-            border-radius: 12px;
-            margin-bottom: 15px;
-            cursor: pointer;
-            display: none;
-            font-weight: 500;
-            width: 100%;
-        }
-        .tabs {
+        .tab-buttons {
             display: flex;
-            background: rgba(0, 242, 254, 0.05);
-            border-radius: 12px;
-            padding: 4px;
-            margin: 20px 0;
-            flex-wrap: wrap;
-            gap: 2px;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #00f2fe30;
         }
-        .tab {
+        .tab-button {
             flex: 1;
-            padding: 8px 6px;
-            text-align: center;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 500;
-            font-size: 11px;
-            min-width: 0;
-        }
-        .tab.active {
-            background: #00f2fe;
-            color: #000;
-            box-shadow: 0 0 15px #00f2fe;
-        }
-        .input-label {
-            color: #00f2fe;
-            font-size: 14px;
-            margin-bottom: 8px;
-            text-align: center;
-            letter-spacing: 1px;
-        }
-        .input-group { 
-            margin-bottom: 20px; 
-            position: relative;
-        }
-        input { 
-            width: 100%; 
-            padding: 15px 15px 15px 45px; 
-            border: 2px solid #00f2fe30; 
-            border-radius: 12px; 
-            background: rgba(0,0,0,0.4); 
-            color: #00f2fe; 
-            font-size: 16px; 
-            outline: none;
-            font-family: 'Rajdhani', sans-serif;
-            font-weight: 500;
-        }
-        input:focus { 
-            border-color: #00f2fe; 
-            box-shadow: 0 0 15px #00f2fe50;
-        }
-        .input-icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #00f2fe80;
-        }
-        .btn { 
-            width: 100%; 
-            padding: 16px; 
+            padding: 15px 0;
+            background: transparent;
             border: none;
-            border-radius: 12px; 
-            font-weight: 700; 
-            font-size: 16px; 
+            color: #00f2fe80;
+            font-size: 1.1em;
             cursor: pointer;
-            margin: 8px 0;
-            font-family: 'Rajdhani', sans-serif;
+            transition: all 0.3s ease;
+            font-family: 'Orbitron', sans-serif;
             letter-spacing: 1px;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: block;
-            text-align: center;
         }
-        .btn-primary { 
-            background: linear-gradient(135deg, #00f2fe, #4facfe); 
-            color: #000; 
+        .tab-button.active {
+            color: #00f2fe;
+            border-bottom: 3px solid #00f2fe;
+            text-shadow: 0 0 10px #00f2fe;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 12px;
+            border: 1px solid #00f2fe50;
+            background: #0a0e1a;
+            color: #00ff64;
+            border-radius: 8px;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+        input[type="text"]::placeholder {
+            color: #00f2fe50;
+        }
+        input[type="text"]:focus {
+            border-color: #00f2fe;
+            box-shadow: 0 0 10px #00f2fe50;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, #00f2fe, #00ff64);
+            border: none;
+            border-radius: 8px;
+            color: #0a0e1a;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 1px;
             box-shadow: 0 0 20px #00f2fe50;
         }
-        .btn-primary:hover { box-shadow: 0 0 30px #00f2fe; }
-        .btn-success { 
-            background: linear-gradient(135deg, #00ff64, #00c853); 
-            color: #000; 
-            box-shadow: 0 0 20px #00ff6450;
+        button:hover {
+            background: linear-gradient(90deg, #00ff64, #00f2fe);
+            box-shadow: 0 0 30px #00ff64;
         }
-        .btn-dark { 
-            background: rgba(0, 242, 254, 0.1); 
-            border: 1px solid #00f2fe30;
-            color: #00f2fe; 
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: none;
         }
-        .btn-danger { 
-            background: linear-gradient(135deg, #ff4757, #ff3838); 
-            color: #fff; 
-            box-shadow: 0 0 20px #ff475750;
-        }
-        .btn-copy {
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            color: #fff;
-            box-shadow: 0 0 20px #6366f150;
-        }
-        .btn-copy:active {
-            transform: scale(0.95);
-        }
-        .btn-deploy {
-            background: linear-gradient(135deg, #7952B3, #5a3d9e);
-            color: #fff;
-            box-shadow: 0 0 20px #7952B350;
-        }
-        .btn-qr {
-            background: linear-gradient(135deg, #25D366, #128C7E);
-            color: #fff;
-            box-shadow: 0 0 20px #25D36650;
-        }
-        .server-links {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-            margin: 15px 0;
-        }
-        .server-link {
-            background: rgba(0, 242, 254, 0.08);
-            border: 1px solid #00f2fe30;
-            border-radius: 12px;
-            padding: 14px;
+        .qr-container {
             text-align: center;
-            text-decoration: none;
+            margin-top: 20px;
+        }
+        #qr-image {
+            width: 250px; height: 250px;
+            background: #fff;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 0 30px #00f2fe50;
+            display: none;
+            margin: 0 auto 20px;
+        }
+        #qr-status {
             color: #00f2fe;
-            font-weight: 600;
-            font-size: 14px;
-            transition: all 0.3s;
+            font-size: 1.1em;
+            margin-top: 15px;
         }
-        .server-link:hover {
-            background: rgba(0, 242, 254, 0.15);
-            box-shadow: 0 0 15px #00f2fe30;
-        }
-        .server-link .server-label {
-            font-size: 11px;
-            color: #00f2fe80;
-            margin-bottom: 4px;
-            letter-spacing: 1px;
-        }
-        .server-link .server-name {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 14px;
-        }
-        #result { 
-            margin-top: 20px; 
-        }
-        .code-display {
-            text-align: center;
+        #pair-code-display {
+            background: #1a1a2e;
+            border: 1px dashed #00f2fe;
             padding: 20px;
-        }
-        .copy-text {
-            color: #00f2fe;
-            font-size: 14px;
-            margin-bottom: 15px;
-            font-weight: 500;
-        }
-        .code-box {
-            border: 2px dashed #00ff64;
-            border-radius: 15px;
-            padding: 20px;
-            margin: 15px 0;
-            background: rgba(0, 255, 100, 0.05);
-        }
-        .code-text { 
-            color: #00ff64;
-            font-size: 32px; 
-            letter-spacing: 5px;
-            text-shadow: 0 0 15px #00ff64;
-            font-weight: 900;
+            border-radius: 10px;
             font-family: 'Orbitron', monospace;
-        }
-        .session-info {
-            background: rgba(0, 242, 254, 0.08);
-            border: 1px solid #00f2fe30;
-            border-radius: 12px;
-            padding: 15px;
-            margin: 15px 0;
-            text-align: center;
-        }
-        .session-label {
-            color: #00f2fe80;
-            font-size: 11px;
-            letter-spacing: 1px;
-            margin-bottom: 5px;
-        }
-        .session-text {
+            font-size: 1.3em;
             color: #00ff64;
-            font-size: 13px;
             word-break: break-all;
-            max-height: 80px;
-            overflow-y: auto;
-            padding: 8px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 8px;
-        }
-        .deploy-section {
-            margin: 20px 0;
-            padding: 15px;
-            background: rgba(121, 82, 179, 0.1);
-            border: 1px solid #7952B330;
-            border-radius: 12px;
-        }
-        .deploy-label {
             text-align: center;
-            color: #7952B3;
-            font-size: 13px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            letter-spacing: 1px;
+            margin-top: 20px;
+            box-shadow: 0 0 20px #00f2fe30;
+        }
+        .status-message {
+            margin-top: 20px;
+            font-size: 1.1em;
+            color: #00f2fe;
+            text-align: center;
         }
         .footer {
             text-align: center;
-            margin-top: 25px;
-            color: #00f2fe50;
-            font-size: 12px;
-        }
-        .dev-numbers {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin: 8px 0;
-        }
-        .hide { display: none !important; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .how-to {
-            background: rgba(0, 242, 254, 0.05);
-            border: 1px solid #00f2fe20;
-            border-radius: 12px;
-            padding: 12px;
-            margin: 15px 0;
-            font-size: 12px;
+            margin-top: 30px;
+            font-size: 0.9em;
             color: #00f2fe80;
         }
-        .how-to strong {
-            color: #00f2fe;
+        .footer a {
+            color: #00ff64;
+            text-decoration: none;
         }
-        /* Loading spinner */
-        .loading-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            flex-direction: column;
-        }
-        .loading-overlay.show { display: flex; }
-        .spinner {
-            width: 60px; height: 60px;
-            border: 4px solid #00f2fe30;
-            border-top: 4px solid #00f2fe;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .loading-text {
-            color: #00f2fe;
-            margin-top: 15px;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .number-display {
-            color: #00f2fe80;
-            font-size: 12px;
-            margin-top: 8px;
+        .footer a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
 <body>
-    <div class="loading-overlay" id="loading-overlay">
-        <div class="spinner"></div>
-        <div class="loading-text" id="loading-text">Generating pairing code...</div>
-    </div>
-
-    <div class="marquee">
-        <div class="marquee-content">
-            <span class="marquee-logo">WELCOME FOR MOMO XMD</span>
-            <span class="marquee-logo">WELCOME FOR MOMO XMD</span>
-            <span class="marquee-logo">WELCOME FOR MOMO XMD</span>
-        </div>
-    </div>
-    
     <div class="container">
-        <div id="main-screen">
-            <div class="stats">
-                <div class="stat-box">
-                    <div class="stat-num">5</div>
-                    <div class="stat-label">SERVERS</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-num">FAST</div>
-                    <div class="stat-label">PAIRING</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-num">XMD</div>
-                    <div class="stat-label">VERSION</div>
-                </div>
+        <div class="logo-section">
+            <div class="logo">
+                <img src="https://raw.githubusercontent.com/MOMO-4747/MOMO-XMD/main/media/momo_hacker_logo.png" alt="MOMO-XMD Logo">
             </div>
-
-            <div class="logo-section">
-                <div class="logo">
-                    <div class="logo-ring"></div>
-                    <img src="https://raw.githubusercontent.com/MOMO-4747/MOMO-XMD/main/media/momo.jpg" alt="MOMO-XMD">
-                    <div class="skull-eyes">
-                        <div class="eye left"></div>
-                        <div class="eye right"></div>
-                    </div>
-                </div>
-                <div class="title">MOMO-XMD</div>
-                <div class="status">&#9679; SYSTEM ONLINE</div>
-            </div>
-
-            <div class="tabs">
-                <div class="tab active" onclick="switchTab('vps')">VPS</div>
-                <div class="tab" onclick="switchTab('heroku')">Heroku</div>
-                <div class="tab" onclick="switchTab('domain')">Domain</div>
-                <div class="tab" onclick="switchTab('port')">Port</div>
-                <div class="tab" onclick="switchTab('qrcode')">QR Code</div>
-            </div>
-
-            <!-- VPS SERVER TAB -->
-            <div id="tab-vps" class="tab-content active">
-                <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
-                <div class="input-group">
-                    <span class="input-icon">&#127760;</span>
-                    <input type="text" id="number-vps" placeholder="e.g. 255712345678">
-                </div>
-                <button class="btn btn-primary" onclick="getPairCode('vps')">&#9889; GENERATE PAIRING CODE</button>
-                <div class="how-to">
-                    <strong>How to use:</strong><br>
-                    1. Enter your WhatsApp number with country code<br>
-                    2. Click "GENERATE PAIRING CODE"<br>
-                    3. Enter the code in WhatsApp → Linked Devices<br>
-                    4. Your SESSION_ID will appear on this page
-                </div>
-            </div>
-
-            <!-- HEROKU TAB -->
-            <div id="tab-heroku" class="tab-content">
-                <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
-                <div class="input-group">
-                    <span class="input-icon">&#127760;</span>
-                    <input type="text" id="number-heroku" placeholder="e.g. 255712345678">
-                </div>
-                <button class="btn btn-primary" onclick="getPairCode('heroku')">&#9889; GENERATE PAIRING CODE</button>
-                <div class="deploy-section">
-                    <div class="deploy-label">&#9889; DEPLOY TO HEROKU</div>
-                    <a href="https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#128293; DEPLOY MOMO-XMD BOT</a>
-                </div>
-            </div>
-
-            <!-- CUSTOM DOMAIN TAB -->
-            <div id="tab-domain" class="tab-content">
-                <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
-                <div class="input-group">
-                    <span class="input-icon">&#127760;</span>
-                    <input type="text" id="number-domain" placeholder="e.g. 255712345678">
-                </div>
-                <button class="btn btn-primary" onclick="getPairCode('domain')">&#9889; GENERATE PAIRING CODE</button>
-                <div class="deploy-section">
-                    <div class="deploy-label">&#128293; MOMO-XMD DOMAIN</div>
-                    <a href="https://momo-xmd-pairing.duckdns.org" target="_blank" class="btn btn-deploy">&#127760; CUSTOM DOMAIN PAIRING</a>
-                </div>
-            </div>
-
-            <!-- PORT-BASED TAB -->
-            <div id="tab-port" class="tab-content">
-                <div class="input-label">ENTER NUMBER WITH COUNTRY CODE</div>
-                <div class="input-group">
-                    <span class="input-icon">&#127760;</span>
-                    <input type="text" id="number-port" placeholder="e.g. 255712345678">
-                </div>
-                <button class="btn btn-primary" onclick="getPairCode('port')">&#9889; GENERATE PAIRING CODE</button>
-                <div class="deploy-section">
-                    <div class="deploy-label">&#9889; VPS PORT ACCESS</div>
-                    <a href="http://212.224.86.233:8000/" target="_blank" class="btn btn-deploy">&#128295; VPS PORT 8000</a>
-                </div>
-            </div>
-
-            <!-- QR CODE TAB -->
-            <div id="tab-qrcode" class="tab-content">
-                <div style="text-align:center; padding: 20px;">
-                    <p style="color: #00f2fe; margin-bottom: 15px;">Scan this QR code with WhatsApp</p>
-                    <img id="qr-image" src="" alt="QR Code" style="display:none; max-width:250px; border-radius:10px; margin: 0 auto;">
-                    <p id="qr-status" style="color:#00ff64; font-size:13px;">Click button to generate QR</p>
-                </div>
-                <button class="btn btn-qr" onclick="getQRCode()">&#128225; GENERATE QR CODE</button>
-            </div>
-
-            <!-- CHANNEL & DEPLOY BUTTONS -->
-            <div style="margin-top: 15px;">
-                <a href="https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U" target="_blank" class="btn btn-success">&#128172; JOIN SUPPORT CHANNEL</a>
-                <a href="https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#128293; DEPLOY TO HEROKU</a>
-                <a href="https://render.com/deploy?repo=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#9889; DEPLOY TO RENDER</a>
-            </div>
-            
-            <div class="dev-numbers">
-                <a href="https://wa.me/255760298574" target="_blank" class="btn btn-dark">&#128100; MOMO47</a>
-                <a href="https://wa.me/255765409584" target="_blank" class="btn btn-dark">&#128100; SUPPORT</a>
-            </div>
-            
-            <a href="https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-dark">&#128039; VIEW REPO</a>
+            <h1>MOMO-XMD CYBER PAIRING</h1>
+            <p>Securely link your WhatsApp bot.</p>
         </div>
 
-        <!-- PAIRING CODE RESULT SCREEN (hidden by default) -->
-        <div id="code-screen" class="hide">
-            <button class="back-btn" id="back-btn" onclick="goBack()">&#8592; Back</button>
-            <div class="code-display">
-                <div class="copy-text">Tap button below to copy code</div>
-                <div class="code-box">
-                    <div class="code-text" id="pair-code"></div>
-                </div>
-                <button class="btn btn-copy" onclick="copyCode()">&#128203; COPY CODE</button>
-                <div class="number-display" id="number-display"></div>
-                <div class="session-info" id="code-session-info" style="margin-top:15px;">
-                    <div class="session-label">SESSION ID (for bot deployment)</div>
-                    <div class="session-text" id="code-session-text"></div>
-                    <button class="btn btn-copy" onclick="copySessionCode()" style="margin-top:8px;">&#128203; COPY SESSION ID</button>
-                </div>
-                <div class="how-to" style="margin-top:15px;">
-                    <strong>Next Steps:</strong><br>
-                    1. Copy the pairing code above<br>
-                    2. Open WhatsApp → Settings → Linked Devices<br>
-                    3. Click "Link a Device"<br>
-                    4. Enter the pairing code<br>
-                    5. Save the SESSION_ID below for your bot
-                </div>
-                <a href="https://heroku.com/deploy?template=https://github.com/MOMO-4747/MOMO-XMD" target="_blank" class="btn btn-deploy">&#128293; DEPLOY TO HEROKU</a>
+        <div class="tab-buttons">
+            <button class="tab-button active" onclick="openTab(event, 'pairing-code')">PAIRING CODE</button>
+            <button class="tab-button" onclick="openTab(event, 'qr-code')">QR CODE</button>
+        </div>
+
+        <div id="pairing-code" class="tab-content active">
+            <div class="input-group">
+                <input type="text" id="phone-number" placeholder="Enter WhatsApp number (e.g., 255760298574)">
+            </div>
+            <button onclick="generatePairingCode()" id="pair-btn">GENERATE PAIRING CODE</button>
+            <div id="pair-code-display" style="display: none;"></div>
+            <div id="pairing-status" class="status-message"></div>
+        </div>
+
+        <div id="qr-code" class="tab-content">
+            <div class="qr-container">
+                <img id="qr-image" src="" alt="QR Code">
+                <p id="qr-status">Click 'Generate QR' to start.</p>
+                <button onclick="generateQRCode()" id="qr-btn">GENERATE QR CODE</button>
             </div>
         </div>
-        
-        <div class="footer">&#169; MOMO-XMD by MOMO47</div>
+
+        <div class="footer">
+            Built with ❤️ by <a href="https://github.com/MOMO-4747">MOMO47</a>
+        </div>
     </div>
 
     <script>
         let currentCode = '';
-        let currentSessionId = '';
-        let currentNumber = '';
-        let isProcessing = false;
 
-        function showLoading(text) {
-            document.getElementById('loading-text').textContent = text;
-            document.getElementById('loading-overlay').classList.add('show');
-        }
-        
-        function hideLoading() {
-            document.getElementById('loading-overlay').classList.remove('show');
-        }
-
-        function switchTab(tab) {
-            const tabs = document.querySelectorAll('.tab');
-            const contents = document.querySelectorAll('.tab-content');
-            const tabNames = ['vps', 'heroku', 'domain', 'port', 'qrcode'];
-            
-            tabs.forEach(t => t.classList.remove('active'));
-            contents.forEach(c => c.classList.remove('active'));
-            
-            const idx = tabNames.indexOf(tab);
-            if (idx >= 0) {
-                tabs[idx].classList.add('active');
-                document.getElementById('tab-' + tab).classList.add('active');
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
             }
-        }
-
-        function getInputId(server) {
-            const mapping = {
-                'vps': 'number-vps',
-                'heroku': 'number-heroku',
-                'domain': 'number-domain',
-                'port': 'number-port'
-            };
-            return mapping[server] || 'number-' + server;
-        }
-
-        async function getPairCode(server) {
-            // Prevent double-clicks
-            if (isProcessing) return;
-            
-            const inputId = getInputId(server);
-            const number = document.getElementById(inputId).value.trim();
-            
-            // Validate number
-            if (!number) { 
-                alert('Please enter your WhatsApp number with country code'); 
-                return; 
+            tablinks = document.getElementsByClassName("tab-button");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
             }
-            
-            // Clean number
-            const cleanNumber = number.replace(/[^0-9]/g, '');
-            if (cleanNumber.length < 9 || cleanNumber.length > 15) {
-                alert('Invalid phone number. Please enter a valid number with country code');
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        async function generatePairingCode() {
+            const phoneNumber = document.getElementById('phone-number').value;
+            const pairBtn = document.getElementById('pair-btn');
+            const pairCodeDisplay = document.getElementById('pair-code-display');
+            const pairingStatus = document.getElementById('pairing-status');
+
+            if (!phoneNumber) {
+                alert('Please enter your WhatsApp number.');
                 return;
             }
-            
-            // Set processing flag
-            isProcessing = true;
-            currentNumber = cleanNumber;
-            
-            const btn = document.querySelector('#tab-' + server + ' .btn-primary');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '&#9203; GENERATING...';
-            btn.disabled = true;
-            btn.style.opacity = '0.7';
-            
-            showLoading('Connecting to WhatsApp servers...');
+
+            pairBtn.disabled = true;
+            pairBtn.innerHTML = 'GENERATING...';
+            pairingStatus.textContent = 'Requesting pairing code...';
+            pairingStatus.style.color = '#00f2fe';
 
             try {
-                const res = await fetch('/pair', {
+                const response = await fetch('/pair', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number: cleanNumber })
+                    body: JSON.stringify({ number: phoneNumber })
                 });
-                const data = await res.json();
-                
-                hideLoading();
-                
+                const data = await response.json();
+
                 if (data.success) {
                     currentCode = data.code;
-                    currentSessionId = data.sessionId || '';
-                    const sessionKey = data.sessionKey || '';
-                    
-                    // Set the pairing code on the result screen
-                    document.getElementById('pair-code').textContent = data.code;
-                    document.getElementById('number-display').textContent = 'Number: ' + cleanNumber;
-                    
-                    // Show session status
-                    const sessionText = document.getElementById('code-session-text');
-                    const sessionBtn = document.getElementById('code-session-info').querySelector('.btn-copy');
-                    
-                    if (data.sessionReady && data.sessionId && data.sessionId.length > 10) {
-                        // WhatsApp already accepted - show session immediately
-                        currentSessionId = data.sessionId;
-                        sessionText.textContent = data.sessionId;
-                        document.getElementById('code-session-info').style.display = 'block';
-                        sessionBtn.style.display = 'block';
-                    } else {
-                        // Waiting for WhatsApp to accept - start polling
-                        sessionText.textContent = '⏳ Waiting for WhatsApp to accept pairing code...\nEnter the code above in WhatsApp → Settings → Linked Devices';
-                        document.getElementById('code-session-info').style.display = 'block';
-                        sessionBtn.style.display = 'none';
-                        // Start polling for session using session key
-                        startSessionPolling(sessionKey);
-                    }
-                    
-                    // Switch to code screen
-                    document.getElementById('main-screen').classList.add('hide');
-                    document.getElementById('code-screen').classList.remove('hide');
-                    document.getElementById('back-btn').style.display = 'block';
+                    pairCodeDisplay.textContent = 'CODE: ' + data.code;
+                    pairCodeDisplay.style.display = 'block';
+                    pairingStatus.textContent = 'Enter this code in WhatsApp > Linked Devices.';
+                    pairingStatus.style.color = '#00ff64';
                 } else {
-                    alert('ERROR: ' + (data.message || 'Unknown error'));
+                    pairingStatus.textContent = 'Error: ' + (data.message || 'Failed to generate code.');
+                    pairingStatus.style.color = '#ff4757';
+                    pairCodeDisplay.style.display = 'none';
                 }
-                
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                btn.style.opacity = '1';
-                isProcessing = false;
-                
-            } catch (e) {
-                hideLoading();
-                alert('SERVER ERROR: Please check your connection and try again');
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                btn.style.opacity = '1';
-                isProcessing = false;
+            } catch (error) {
+                pairingStatus.textContent = 'Server error. Please try again later.';
+                pairingStatus.style.color = '#ff4757';
+                pairCodeDisplay.style.display = 'none';
             }
+            pairBtn.disabled = false;
+            pairBtn.innerHTML = 'GENERATE PAIRING CODE';
         }
 
-        async function getQRCode() {
-            const qrImg = document.getElementById('qr-image');
+        async function generateQRCode() {
+            const qrImage = document.getElementById('qr-image');
             const qrStatus = document.getElementById('qr-status');
+            const qrBtn = document.getElementById('qr-btn');
+
+            qrBtn.disabled = true;
+            qrBtn.innerHTML = 'GENERATING QR...';
             qrStatus.textContent = 'Generating QR Code...';
             qrStatus.style.color = '#00f2fe';
-            
+            qrImage.style.display = 'none';
+
             try {
-                const res = await fetch('/qr');
-                const data = await res.json();
+                const response = await fetch('/qr');
+                const data = await response.json();
+
                 if (data.success && data.qr) {
-                    qrImg.src = data.qr;
-                    qrImg.style.display = 'block';
-                    qrStatus.textContent = 'Scan this QR with WhatsApp Camera';
+                    qrImage.src = data.qr;
+                    qrImage.style.display = 'block';
+                    qrStatus.textContent = 'Scan this QR with WhatsApp > Linked Devices.';
                     qrStatus.style.color = '#00ff64';
                 } else {
-                    qrStatus.textContent = data.message || 'Failed to generate QR';
+                    qrStatus.textContent = 'Error: ' + (data.message || 'Failed to generate QR.');
                     qrStatus.style.color = '#ff4757';
+                    qrImage.style.display = 'none';
                 }
-            } catch (e) {
-                qrStatus.textContent = 'Server error. Please try again.';
+            } catch (error) {
+                qrStatus.textContent = 'Server error. Please try again later.';
                 qrStatus.style.color = '#ff4757';
+                qrImage.style.display = 'none';
             }
+            qrBtn.disabled = false;
+            qrBtn.innerHTML = 'GENERATE QR CODE';
         }
 
-        let sessionPollTimer = null;
-
-        let currentSessionKey = '';
-
-        function startSessionPolling(sessionKey) {
-            // Clear any existing polling
-            if (sessionPollTimer) clearInterval(sessionPollTimer);
-            if (!sessionKey) {
-                // No session key - just show waiting message
-                const sessionText = document.getElementById('code-session-text');
-                const sessionBtn = document.getElementById('code-session-info').querySelector('.btn-copy');
-                setTimeout(() => {
-                    sessionText.textContent = 'Session timeout - WhatsApp did not accept the code. Please try again.';
-                    sessionBtn.style.display = 'none';
-                }, 120000);
-                return;
-            }
-            
-            currentSessionKey = sessionKey;
-            let pollCount = 0;
-            const maxPolls = 120; // 4 minutes (check every 2 seconds)
-            
-            const sessionInfo = document.getElementById('code-session-info');
-            const sessionText = document.getElementById('code-session-text');
-            const sessionBtn = sessionInfo.querySelector('.btn-copy');
-            
-            sessionPollTimer = setInterval(async () => {
-                pollCount++;
-                
-                if (pollCount > maxPolls) {
-                    clearInterval(sessionPollTimer);
-                    sessionText.textContent = 'Session timeout - WhatsApp did not accept the code. Please try again.';
-                    sessionBtn.style.display = 'none';
-                    return;
-                }
-                
-                try {
-                    const res = await fetch('/session-status/' + sessionKey);
-                    const data = await res.json();
-                    
-                    if (data.sessionReady && data.sessionId) {
-                        clearInterval(sessionPollTimer);
-                        currentSessionId = data.sessionId;
-                        sessionText.textContent = data.sessionId;
-                        sessionBtn.style.display = 'block';
-                    }
-                } catch (e) {
-                    // Ignore polling errors
-                }
-            , 2000);
-        }
-
-        function goBack() {
-            if (sessionPollTimer) clearInterval(sessionPollTimer);
-            document.getElementById('main-screen').classList.remove('hide');
-            document.getElementById('code-screen').classList.add('hide');
-            document.getElementById('back-btn').style.display = 'none';
-            // Clear all inputs
-            document.querySelectorAll('input[type="text"]').forEach(i => i.value = '');
-            currentCode = '';
-            currentSessionId = '';
-            currentNumber = '';
-        }
-
-        function copyCode() {
-            if (currentCode) {
-                if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(currentCode).then(() => {
-                        showCopied();
-                    }).catch(() => {
-                        fallbackCopy(currentCode);
-                    });
-                } else {
-                    fallbackCopy(currentCode);
-                }
-            }
-        }
-
-        function copySessionCode() {
-            if (currentSessionId && currentSessionId.length > 10) {
-                if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(currentSessionId).then(() => {
-                        const btn = document.querySelector('.btn-copy');
-                        const original = btn.innerHTML;
-                        btn.innerHTML = '&#9989; SESSION COPIED!';
-                        setTimeout(() => { btn.innerHTML = original; }, 2000);
-                    }).catch(() => {
-                        fallbackCopy(currentSessionId);
-                    });
-                } else {
-                    fallbackCopy(currentSessionId);
-                }
-            } else {
-                alert('Session ID is not available yet. Pairing code must be accepted in WhatsApp first.');
-            }
-        }
-
-        function fallbackCopy(text) {
-            const textArea = document.createElement('textarea');
-            textArea.value = text;
-            textArea.style.position = 'fixed';
-            textArea.style.left = '-999999px';
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                showCopied();
-            } catch (err) {
-                alert('Failed to copy. Long press code to copy manually: ' + text);
-            }
-            document.body.removeChild(textArea);
-        }
-
-        function showCopied() {
-            const btns = document.querySelectorAll('.btn-copy');
-            btns.forEach(btn => {
-                if (btn.textContent.includes('COPY')) {
-                    const original = btn.innerHTML;
-                    btn.innerHTML = '&#9989; COPIED!';
-                    btn.style.background = 'linear-gradient(135deg, #00ff64, #00c853)';
-                    setTimeout(() => {
-                        btn.innerHTML = original;
-                        btn.style.background = 'linear-gradient(135deg, #6366f1, #4f46e5)';
-                    }, 2000);
-                }
-            });
-        }
+        // Default to pairing code tab on load
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('pairing-code').style.display = 'block';
+            document.querySelector('.tab-button').classList.add('active');
+        });
     </script>
 </body>
 </html>
