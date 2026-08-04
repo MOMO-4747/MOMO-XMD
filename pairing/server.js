@@ -12,7 +12,6 @@ const pino = require('pino')
 const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
-const QRCode = require('qrcode')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -41,7 +40,7 @@ app.get('/session-status/:key', (req, res) => {
     if (!session) return res.json({ success: false, status: 'waiting' })
     if (session.error) return res.json({ success: false, status: 'error', message: session.error })
     if (session.sessionId) return res.json({ success: true, status: 'connected', sessionReady: true, sessionId: session.sessionId })
-    return res.json({ success: false, status: 'waiting' })
+    return res.json({ success: false, status: session.status || 'waiting' })
 })
 
 app.post('/pair', async (req, res) => {
@@ -49,7 +48,7 @@ app.post('/pair', async (req, res) => {
     if (!number) return res.status(400).json({ success: false, message: 'Number required' })
     
     let cleanNumber = String(number).replace(/[^0-9]/g, '')
-    console.log(`\n[PAIRING] New Request: ${cleanNumber}`)
+    console.log(`\n[REQUEST] New pairing request for: ${cleanNumber}`)
 
     const release = await mutex.acquire()
     const sessionKey = 'momo_' + Date.now()
@@ -71,16 +70,17 @@ app.post('/pair', async (req, res) => {
             version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'info' }))
             },
             printQRInTerminal: false,
-            logger: pino({ level: 'fatal' }),
+            logger: pino({ level: 'info' }),
             browser: ["Ubuntu", "Chrome", "121.0.6167.85"],
-            markOnlineOnConnect: false,
+            markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
-            keepAliveIntervalMs: 10000
+            keepAliveIntervalMs: 10000,
+            shouldSyncHistoryMessage: () => false // Speed up connection
         })
 
         sock.ev.on('creds.update', saveCreds)
@@ -88,8 +88,13 @@ app.post('/pair', async (req, res) => {
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update
             
+            if (connection) {
+                console.log(`[CONN_UPDATE] State: ${connection} for ${cleanNumber}`)
+                sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection })
+            }
+
             if (connection === 'open') {
-                console.log(`[SUCCESS] ${cleanNumber} Connected!`)
+                console.log(`[SUCCESS] ${cleanNumber} IS NOW CONNECTED!`)
                 await new Promise(r => setTimeout(r, 2000))
                 await saveCreds()
                 
@@ -104,9 +109,9 @@ app.post('/pair', async (req, res) => {
                         await sock.sendMessage(userId, { 
                             text: `*✅ MOMO-XMD Connected!*\n\n*Session ID:*\n\n${sessionId}\n\n_Copy this ID and use it in your bot configuration._` 
                         })
-                        console.log(`[INFO] Session ID sent to WhatsApp inbox.`)
+                        console.log(`[MSG] Session ID sent to user.`)
                     } catch (e) {
-                        console.log(`[ERROR] Send message failed: ${e.message}`)
+                        console.log(`[MSG_ERR] Failed to send: ${e.message}`)
                     }
                 }
 
@@ -118,35 +123,42 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
-                console.log(`[CLOSED] ${cleanNumber} Reason Code: ${reason}`)
+                console.log(`[CLOSED] ${cleanNumber} Reason: ${reason}`)
+                
+                if (reason === DisconnectReason.loggedOut) {
+                    sessions.set(sessionKey, { status: 'error', error: 'Logged out from device.' })
+                } else if (reason !== DisconnectReason.restartRequired) {
+                    // Log other reasons for debugging
+                    console.log(`[DEBUG] Disconnect detail:`, lastDisconnect?.error)
+                }
             }
         })
 
-        // Fast code generation (2 seconds delay)
+        // Request pairing code
         setTimeout(async () => {
             try {
                 if (isResolved) return
-                console.log(`[ACTION] Requesting code for ${cleanNumber}...`)
+                console.log(`[ACTION] Fetching code for ${cleanNumber}...`)
                 let code = await sock.requestPairingCode(cleanNumber)
                 if (code && !isResolved) {
                     isResolved = true
-                    console.log(`[CODE] Generated: ${code}`)
+                    console.log(`[CODE] Success: ${code}`)
                     res.json({ success: true, code: code, sessionKey })
                 }
             } catch (err) {
                 console.log(`[ERROR] Request failed: ${err.message}`)
                 if (!isResolved) {
                     isResolved = true
-                    res.status(500).json({ success: false, message: 'WhatsApp rejected. Try again in 5 mins.' })
+                    res.status(500).json({ success: false, message: 'WhatsApp rejected request. Try again.' })
                 }
             }
-        }, 2000)
+        }, 3000)
 
-        // Safety timeout
+        // Safety timeout for the entire request
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true
-                res.status(500).json({ success: false, message: 'Request timeout. Please try again.' })
+                res.status(500).json({ success: false, message: 'Timeout. Please refresh.' })
             }
         }, 25000)
 
@@ -161,4 +173,4 @@ app.post('/pair', async (req, res) => {
     }
 })
 
-app.listen(PORT, () => console.log(`Server on ${PORT}`))
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
