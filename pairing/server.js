@@ -5,7 +5,8 @@ const {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    DisconnectReason
+    DisconnectReason,
+    Browsers
 } = require('@whiskeysockets/baileys')
 const pino = require('pino')
 const NodeCache = require('node-cache')
@@ -23,7 +24,6 @@ const mutex = new Mutex()
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-// FIX: Correct static path - server.js is in /pairing, so public is in ./public
 const publicPath = path.join(__dirname, 'public')
 app.use(express.static(publicPath))
 
@@ -32,7 +32,7 @@ app.get('/', (req, res) => {
     if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath)
     } else {
-        res.send('<h1>MOMO-XMD Pairing Server</h1><p>Online - UI files missing</p>')
+        res.send('<h1>MOMO-XMD Pairing Server</h1><p>Online</p>')
     }
 })
 
@@ -64,7 +64,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ['MOMO-XMD', 'Safari', '10.15.7'],
+            browser: Browsers.macOS('Desktop'),
             markOnlineOnConnect: true,
             msgRetryCounterCache
         })
@@ -132,7 +132,7 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ['Mac OS', 'Safari', '10.15.7'], // Improved browser string
+            browser: Browsers.macOS('Chrome'), // Standard browser string for validity
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -149,8 +149,6 @@ app.post('/pair', async (req, res) => {
             
             if (connection === 'open') {
                 console.log(`[SUCCESS] ${cleanNumber} connected!`)
-                
-                // Wait for creds to be fully saved
                 await new Promise(r => setTimeout(r, 2000))
                 await saveCreds()
                 
@@ -158,61 +156,42 @@ app.post('/pair', async (req, res) => {
                 if (fs.existsSync(credsFile)) {
                     const credsContent = fs.readFileSync(credsFile, 'utf-8')
                     const sessionId = `MOMO-XMD~${Buffer.from(credsContent).toString('base64')}`
-                    
-                    // Update session status for UI
                     sessions.set(sessionKey, { status: 'connected', sessionId, timestamp: Date.now() })
                     
                     try {
                         const userId = sock.user.id.split(':')[0] + '@s.whatsapp.net'
-                        // Send to user's WhatsApp
                         await sock.sendMessage(userId, { 
                             text: `*✅ MOMO-XMD Connected!*\n\n*Session ID:*\n\n${sessionId}\n\n_Copy this ID and use it in your bot configuration._` 
                         })
-                        console.log(`[SENT] Session ID sent to ${cleanNumber}`)
-                    } catch (e) {
-                        console.error(`[ERROR] Failed to send message: ${e.message}`)
-                    }
+                    } catch (e) {}
                 }
 
-                // Close socket after sending
                 setTimeout(() => {
                     try { sock.end(undefined) } catch (e) {}
                     if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
                 }, 5000)
             }
-
-            if (connection === 'close') {
-                const reason = (lastDisconnect?.error)?.output?.statusCode
-                console.log(`[CLOSED] ${cleanNumber} Reason: ${reason}`)
-                if (reason === DisconnectReason.loggedOut) {
-                    sessions.set(sessionKey, { status: 'error', error: 'Logged out from WhatsApp' })
-                }
-            }
         })
 
-        // Robust pairing code request logic
         const requestPairing = async () => {
             for (let i = 0; i < 3; i++) {
                 try {
-                    console.log(`[CODE] Attempt ${i+1} for ${cleanNumber}...`)
                     await new Promise(r => setTimeout(r, 3000))
                     pairingCode = await sock.requestPairingCode(cleanNumber)
                     if (pairingCode) {
-                        console.log(`[CODE] Generated: ${pairingCode}`)
                         resolved = true
                         return res.json({ success: true, code: pairingCode, sessionKey })
                     }
                 } catch (err) {
-                    console.log(`[CODE] Attempt ${i+1} error: ${err.message}`)
+                    console.log(`Attempt ${i+1} failed: ${err.message}`)
                 }
             }
-            throw new Error('Failed to generate pairing code. Please try again.')
+            throw new Error('Failed to generate pairing code.')
         }
 
         await requestPairing()
 
     } catch (error) {
-        console.error(`[ERROR] ${cleanNumber}: ${error.message}`)
         if (!resolved) {
             resolved = true
             sessions.set(sessionKey, { status: 'error', error: error.message })
