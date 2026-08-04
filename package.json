@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "@whiskeysockets/baileys": "6.7.22",
     "async-mutex": "^0.5.0",
     "chalk": "^4.1.2",
     "express": "^4.18.2",
