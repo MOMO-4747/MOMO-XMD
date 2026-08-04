@@ -27,12 +27,7 @@ const publicPath = path.join(__dirname, 'public')
 app.use(express.static(publicPath))
 
 app.get('/', (req, res) => {
-    const indexPath = path.join(publicPath, 'index.html')
-    if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath)
-    } else {
-        res.send('<h1>MOMO-XMD Pairing Server</h1><p>Online</p>')
-    }
+    res.sendFile(path.join(publicPath, 'index.html'))
 })
 
 app.get('/session-status/:key', (req, res) => {
@@ -44,12 +39,12 @@ app.get('/session-status/:key', (req, res) => {
 })
 
 app.post('/pair', async (req, res) => {
+    console.log(`[PAIR_ROUTE] Received request for: ${req.body.number}`)
+    
     const { number } = req.body
     if (!number) return res.status(400).json({ success: false, message: 'Number required' })
     
     let cleanNumber = String(number).replace(/[^0-9]/g, '')
-    console.log(`\n[LOG] Pairing attempt for: ${cleanNumber}`)
-
     const release = await mutex.acquire()
     const sessionKey = 'momo_' + Date.now()
     sessions.set(sessionKey, { status: 'starting', timestamp: Date.now() })
@@ -64,19 +59,17 @@ app.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
-        console.log(`[LOG] Baileys Version: ${version.join('.')}`)
-
         const sock = makeWASocket({
             version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'debug' }))
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
             },
             printQRInTerminal: false,
-            logger: pino({ level: 'debug' }),
-            // Reverting to a more standard browser string for better handshake
-            browser: Browsers.ubuntu('Chrome'), 
-            markOnlineOnConnect: false,
+            logger: pino({ level: 'fatal' }),
+            // User requested exactly this browser string
+            browser: ["Ubuntu", "Chrome", "20.0.04"], 
+            markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
@@ -90,12 +83,12 @@ app.post('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update
             
             if (connection) {
-                console.log(`[LOG] Connection State: ${connection} (${cleanNumber})`)
+                console.log(`[SOCKET] ${cleanNumber} status: ${connection}`)
                 sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection })
             }
 
             if (connection === 'open') {
-                console.log(`[LOG] SUCCESS! ${cleanNumber} is connected.`)
+                console.log(`[SOCKET] ${cleanNumber} CONNECTED SUCCESS!`)
                 await new Promise(r => setTimeout(r, 2000))
                 await saveCreds()
                 
@@ -110,9 +103,8 @@ app.post('/pair', async (req, res) => {
                         await sock.sendMessage(userId, { 
                             text: `*✅ MOMO-XMD Connected!*\n\n*Session ID:*\n\n${sessionId}\n\n_Copy this ID and use it in your bot configuration._` 
                         })
-                        console.log(`[LOG] Session ID sent to WhatsApp.`)
                     } catch (e) {
-                        console.log(`[LOG] Send message error: ${e.message}`)
+                        console.log(`[MSG_ERR] ${e.message}`)
                     }
                 }
 
@@ -124,9 +116,9 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
-                console.log(`[LOG] Connection Closed. Reason: ${reason}`)
+                console.log(`[SOCKET] ${cleanNumber} closed. Reason: ${reason}`)
                 if (reason === DisconnectReason.loggedOut) {
-                    sessions.set(sessionKey, { status: 'error', error: 'Device logged out.' })
+                    sessions.set(sessionKey, { status: 'error', error: 'Logged out.' })
                 }
             }
         })
@@ -135,18 +127,18 @@ app.post('/pair', async (req, res) => {
         setTimeout(async () => {
             try {
                 if (isResolved) return
-                console.log(`[LOG] Requesting pairing code for ${cleanNumber}...`)
+                console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
                 let code = await sock.requestPairingCode(cleanNumber)
                 if (code && !isResolved) {
                     isResolved = true
-                    console.log(`[LOG] Pairing Code: ${code}`)
+                    console.log(`[SOCKET] Code generated: ${code}`)
                     res.json({ success: true, code: code, sessionKey })
                 }
             } catch (err) {
-                console.log(`[LOG] Pairing Code Error: ${err.message}`)
+                console.log(`[SOCKET] Error: ${err.message}`)
                 if (!isResolved) {
                     isResolved = true
-                    res.status(500).json({ success: false, message: 'WhatsApp rejected. Wait 5 mins.' })
+                    res.status(500).json({ success: false, message: 'WhatsApp rejected request.' })
                 }
             }
         }, 3000)
@@ -160,7 +152,7 @@ app.post('/pair', async (req, res) => {
         }, 25000)
 
     } catch (error) {
-        console.log(`[LOG] Fatal Error: ${error.message}`)
+        console.log(`[FATAL] ${error.message}`)
         if (!isResolved) {
             isResolved = true
             sessions.set(sessionKey, { status: 'error', error: error.message })
@@ -171,4 +163,4 @@ app.post('/pair', async (req, res) => {
     }
 })
 
-app.listen(PORT, () => console.log(`Server on port ${PORT}`))
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`))
