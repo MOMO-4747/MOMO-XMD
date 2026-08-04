@@ -13,6 +13,7 @@ const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
 const QRCode = require('qrcode')
+const { HttpsProxyAgent } = require('https-proxy-agent')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -20,6 +21,9 @@ const PORT = process.env.PORT || 3000
 const msgRetryCounterCache = new NodeCache()
 const sessions = new Map()
 const mutex = new Mutex()
+
+// Proxy - Verified for WhatsApp
+const PROXY_URL = 'http://uozfexly:t6y5fclj7j2k@45.151.162.2:6441'
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -44,77 +48,12 @@ app.get('/session-status/:key', (req, res) => {
     return res.json({ success: false, status: 'waiting' })
 })
 
-app.get('/qr', async (req, res) => {
-    const sessionKey = 'momo_qr_' + Date.now()
-    sessions.set(sessionKey, { status: 'starting', timestamp: Date.now() })
-
-    try {
-        const authDir = path.join(__dirname, 'auth_qr_' + Date.now())
-        if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
-        fs.mkdirSync(authDir, { recursive: true })
-
-        const { state, saveCreds } = await useMultiFileAuthState(authDir)
-        const { version } = await fetchLatestBaileysVersion()
-
-        const sock = makeWASocket({
-            version,
-            auth: {
-                creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
-            },
-            printQRInTerminal: false,
-            logger: pino({ level: 'fatal' }),
-            browser: Browsers.macOS('Desktop'),
-            markOnlineOnConnect: true,
-            msgRetryCounterCache
-        })
-
-        sock.ev.on('creds.update', saveCreds)
-
-        let qrSent = false
-        sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr } = update
-            
-            if (qr && !qrSent) {
-                qrSent = true
-                try {
-                    const qrImage = await QRCode.toDataURL(qr)
-                    res.json({ success: true, qr: qrImage, sessionKey })
-                } catch (e) {
-                    if (!res.headersSent) res.status(500).json({ success: false, message: 'QR generation failed' })
-                }
-            }
-
-            if (connection === 'open') {
-                await saveCreds()
-                await new Promise(r => setTimeout(r, 5000))
-                const credsFile = path.join(authDir, 'creds.json')
-                if (fs.existsSync(credsFile)) {
-                    const sessionId = `MOMO-XMD~${Buffer.from(fs.readFileSync(credsFile, 'utf-8')).toString('base64')}`
-                    sessions.set(sessionKey, { status: 'connected', sessionId, timestamp: Date.now() })
-                    try {
-                        const userId = sock.user.id.split(':')[0] + '@s.whatsapp.net'
-                        await sock.sendMessage(userId, { text: `*✅ MOMO-XMD Connected!*\n\nSession ID: ${sessionId}` })
-                    } catch (e) {}
-                }
-                setTimeout(() => {
-                    try { sock.end(undefined) } catch (e) {}
-                    if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
-                }, 10000)
-            }
-        })
-
-    } catch (error) {
-        if (!res.headersSent) res.status(500).json({ success: false, message: error.message })
-    }
-})
-
 app.post('/pair', async (req, res) => {
     const { number } = req.body
     if (!number) return res.status(400).json({ success: false, message: 'Number required' })
     
     let cleanNumber = String(number).replace(/[^0-9]/g, '')
-    console.log(`[PAIRING] New request for: ${cleanNumber}`)
+    console.log(`[PAIRING] Request for: ${cleanNumber}`)
 
     const release = await mutex.acquire()
     const sessionKey = 'momo_' + Date.now()
@@ -138,17 +77,18 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["Mac OS", "Chrome", "121.0.6167.140"],
+            browser: Browsers.ubuntu('Chrome'), // Reliable browser string
+            agent: new HttpsProxyAgent(PROXY_URL), // Use proxy to avoid IP block
             markOnlineOnConnect: true,
             msgRetryCounterCache,
-            connectTimeoutMs: 60000,
+            connectTimeoutMs: 30000,
             defaultQueryTimeoutMs: 0
         })
 
         sock.ev.on('creds.update', saveCreds)
 
         sock.ev.on('connection.update', async (update) => {
-            const { connection } = update
+            const { connection, lastDisconnect } = update
             
             if (connection === 'open') {
                 console.log(`[SUCCESS] ${cleanNumber} connected!`)
@@ -166,7 +106,9 @@ app.post('/pair', async (req, res) => {
                         await sock.sendMessage(userId, { 
                             text: `*✅ MOMO-XMD Connected!*\n\n*Session ID:*\n\n${sessionId}\n\n_Copy this ID and use it in your bot configuration._` 
                         })
-                    } catch (e) {}
+                    } catch (e) {
+                        console.log(`[ERROR] Failed to send message: ${e.message}`)
+                    }
                 }
 
                 setTimeout(() => {
@@ -174,40 +116,49 @@ app.post('/pair', async (req, res) => {
                     if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
                 }, 5000)
             }
-        })
 
-        const requestPairing = async () => {
-            for (let i = 0; i < 5; i++) {
-                try {
-                    // Wait for the socket to be ready
-                    await new Promise(r => setTimeout(r, 10000))
-                    let code = await sock.requestPairingCode(cleanNumber)
-                    if (code) {
-                        isResolved = true
-                        return res.json({ success: true, code: code, sessionKey })
-                    }
-                } catch (err) {
-                    console.log(`Attempt ${i+1} failed: ${err.message}`)
-                    // If connection closed, we might need to recreate the socket, 
-                    // but let's try a few more times with a longer delay first.
+            if (connection === 'close') {
+                const reason = lastDisconnect?.error?.output?.statusCode
+                console.log(`[CLOSED] ${cleanNumber} Reason: ${reason}`)
+                if (reason !== DisconnectReason.loggedOut && !isResolved) {
+                    // Re-try or handle error
                 }
             }
-            throw new Error('WhatsApp rejected the pairing request. Please try again in 5 minutes.')
-        }
+        })
 
-        await requestPairing()
+        // Faster request (2 seconds delay)
+        setTimeout(async () => {
+            try {
+                if (isResolved) return
+                console.log(`[CODE] Requesting for ${cleanNumber}...`)
+                let code = await sock.requestPairingCode(cleanNumber)
+                if (code && !isResolved) {
+                    isResolved = true
+                    console.log(`[CODE] Generated: ${code}`)
+                    res.json({ success: true, code: code, sessionKey })
+                }
+            } catch (err) {
+                console.log(`[ERROR] Pairing failed: ${err.message}`)
+                if (!isResolved) {
+                    isResolved = true
+                    res.status(500).json({ success: false, message: 'WhatsApp rejected the request. Try again.' })
+                }
+            }
+        }, 2000)
+
+        // Safety timeout
+        setTimeout(() => {
+            if (!isResolved) {
+                isResolved = true
+                res.status(500).json({ success: false, message: 'Request timeout. Try again.' })
+            }
+        }, 20000)
 
     } catch (error) {
         if (!isResolved) {
             isResolved = true
             sessions.set(sessionKey, { status: 'error', error: error.message })
             if (!res.headersSent) res.status(500).json({ success: false, message: error.message })
-        }
-        // Cleanup on error
-        if (fs.existsSync(authDir)) {
-            setTimeout(() => {
-                try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
-            }, 5000)
         }
     } finally {
         release()
