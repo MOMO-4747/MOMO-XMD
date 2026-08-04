@@ -35,13 +35,13 @@
             margin-bottom: 30px;
         }
         .logo {
-            width: 180px; height: 180px; border-radius: 50%;
+            width: 150px; height: 150px; border-radius: 50%;
             margin: 0 auto 20px;
             position: relative;
             display: flex; justify-content: center; align-items: center;
             background: linear-gradient(45deg, #00f2fe, #00ff64);
             padding: 5px;
-            box-shadow: 0 0 40px #00f2fe, 0 0 80px #00ff64;
+            box-shadow: 0 0 30px #00f2fe, 0 0 60px #00ff64;
         }
         .logo img {
             width: 100%; height: 100%; border-radius: 50%;
@@ -51,14 +51,14 @@
         }
         h1 {
             font-family: 'Orbitron', sans-serif;
-            font-size: 2.2em;
+            font-size: 1.8em;
             color: #00f2fe;
-            text-shadow: 0 0 15px #00f2fe, 0 0 30px #00ff64;
+            text-shadow: 0 0 15px #00f2fe;
             margin-bottom: 10px;
             letter-spacing: 2px;
         }
         p {
-            font-size: 1.1em;
+            font-size: 1em;
             color: #00ff64;
             margin-bottom: 25px;
         }
@@ -69,15 +69,14 @@
         }
         .tab-button {
             flex: 1;
-            padding: 15px 0;
+            padding: 12px 0;
             background: transparent;
             border: none;
             color: #00f2fe80;
-            font-size: 1.1em;
+            font-size: 1em;
             cursor: pointer;
             transition: all 0.3s ease;
             font-family: 'Orbitron', sans-serif;
-            letter-spacing: 1px;
         }
         .tab-button.active {
             color: #00f2fe;
@@ -94,7 +93,7 @@
             margin-bottom: 20px;
         }
         input[type="text"] {
-            width: calc(100% - 22px);
+            width: 100%;
             padding: 12px;
             border: 1px solid #00f2fe50;
             background: #0a0e1a;
@@ -102,14 +101,10 @@
             border-radius: 8px;
             font-size: 1em;
             outline: none;
-            transition: border-color 0.3s ease;
+            text-align: center;
         }
         input[type="text"]::placeholder {
             color: #00f2fe50;
-        }
-        input[type="text"]:focus {
-            border-color: #00f2fe;
-            box-shadow: 0 0 10px #00f2fe50;
         }
         button {
             width: 100%;
@@ -118,73 +113,50 @@
             border: none;
             border-radius: 8px;
             color: #0a0e1a;
-            font-size: 1.2em;
+            font-size: 1.1em;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
             font-family: 'Orbitron', sans-serif;
-            letter-spacing: 1px;
-            box-shadow: 0 0 20px #00f2fe50;
         }
         button:hover {
-            background: linear-gradient(90deg, #00ff64, #00f2fe);
-            box-shadow: 0 0 30px #00ff64;
+            box-shadow: 0 0 20px #00ff64;
         }
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-            box-shadow: none;
         }
-        .qr-container {
-            text-align: center;
-            margin-top: 20px;
-        }
-        #qr-image {
-            width: 250px; height: 250px;
-            background: #fff;
-            padding: 10px;
-            border-radius: 10px;
-            box-shadow: 0 0 30px #00f2fe50;
-            display: none;
-            margin: 0 auto 20px;
-        }
-        #qr-status {
-            color: #00f2fe;
-            font-size: 1.1em;
-            margin-top: 15px;
-        }
-        #pair-code-display {
+        #pair-code-display, #session-id-display {
             background: #1a1a2e;
             border: 1px dashed #00f2fe;
-            padding: 20px;
+            padding: 15px;
             border-radius: 10px;
             font-family: 'Orbitron', monospace;
-            font-size: 1.3em;
+            font-size: 1.2em;
             color: #00ff64;
             word-break: break-all;
             text-align: center;
             margin-top: 20px;
-            box-shadow: 0 0 20px #00f2fe30;
+            display: none;
+        }
+        #session-id-display {
+            font-size: 0.8em;
+            color: #00f2fe;
+            border-style: solid;
         }
         .status-message {
             margin-top: 20px;
-            font-size: 1.1em;
+            font-size: 1em;
             color: #00f2fe;
             text-align: center;
         }
         .footer {
             text-align: center;
             margin-top: 30px;
-            font-size: 0.9em;
+            font-size: 0.8em;
             color: #00f2fe80;
         }
-        .footer a {
-            color: #00ff64;
-            text-decoration: none;
-        }
-        .footer a:hover {
-            text-decoration: underline;
-        }
+        .footer a { color: #00ff64; text-decoration: none; }
     </style>
 </head>
 <body>
@@ -193,137 +165,129 @@
             <div class="logo">
                 <img src="https://raw.githubusercontent.com/MOMO-4747/MOMO-XMD/main/media/momo_hacker_logo.png" alt="MOMO-XMD Logo">
             </div>
-            <h1>MOMO-XMD CYBER PAIRING</h1>
-            <p>Securely link your WhatsApp bot.</p>
+            <h1>MOMO-XMD PAIRING</h1>
+            <p>Link your WhatsApp securely.</p>
         </div>
 
         <div class="tab-buttons">
-            <button class="tab-button active" onclick="openTab(event, 'pairing-code')">PAIRING CODE</button>
-            <button class="tab-button" onclick="openTab(event, 'qr-code')">QR CODE</button>
+            <button class="tab-button active" onclick="openTab(event, 'pairing-code')">CODE</button>
+            <button class="tab-button" onclick="openTab(event, 'qr-code')">QR</button>
         </div>
 
         <div id="pairing-code" class="tab-content active">
             <div class="input-group">
-                <input type="text" id="phone-number" placeholder="Enter WhatsApp number (e.g., 255760298574)">
+                <input type="text" id="phone-number" placeholder="255760298574">
             </div>
-            <button onclick="generatePairingCode()" id="pair-btn">GENERATE PAIRING CODE</button>
-            <div id="pair-code-display" style="display: none;"></div>
+            <button onclick="generatePairingCode()" id="pair-btn">GENERATE CODE</button>
+            <div id="pair-code-display"></div>
+            <div id="session-id-display"></div>
             <div id="pairing-status" class="status-message"></div>
         </div>
 
         <div id="qr-code" class="tab-content">
-            <div class="qr-container">
-                <img id="qr-image" src="" alt="QR Code">
-                <p id="qr-status">Click 'Generate QR' to start.</p>
-                <button onclick="generateQRCode()" id="qr-btn">GENERATE QR CODE</button>
+            <div style="text-align: center;">
+                <img id="qr-image" style="width: 200px; height: 200px; display: none; margin: 0 auto;" src="" alt="QR">
+                <p id="qr-status">Click below to generate QR.</p>
+                <button onclick="generateQRCode()" id="qr-btn">GENERATE QR</button>
             </div>
         </div>
 
         <div class="footer">
-            Built with ❤️ by <a href="https://github.com/MOMO-4747">MOMO47</a>
+            Built by <a href="https://github.com/MOMO-4747">MOMO47</a>
         </div>
     </div>
 
     <script>
-        let currentCode = '';
+        let sessionCheckInterval;
 
         function openTab(evt, tabName) {
-            var i, tabcontent, tablinks;
-            tabcontent = document.getElementsByClassName("tab-content");
-            for (i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-            }
-            tablinks = document.getElementsByClassName("tab-button");
-            for (i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
+            const contents = document.getElementsByClassName("tab-content");
+            for (let content of contents) content.style.display = "none";
+            const tabs = document.getElementsByClassName("tab-button");
+            for (let tab of tabs) tab.classList.remove("active");
             document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
+            evt.currentTarget.classList.add("active");
         }
 
         async function generatePairingCode() {
-            const phoneNumber = document.getElementById('phone-number').value;
-            const pairBtn = document.getElementById('pair-btn');
-            const pairCodeDisplay = document.getElementById('pair-code-display');
-            const pairingStatus = document.getElementById('pairing-status');
+            const number = document.getElementById('phone-number').value;
+            if (!number) return alert('Enter number!');
+            
+            const btn = document.getElementById('pair-btn');
+            const status = document.getElementById('pairing-status');
+            const codeBox = document.getElementById('pair-code-display');
+            const sessionBox = document.getElementById('session-id-display');
 
-            if (!phoneNumber) {
-                alert('Please enter your WhatsApp number.');
-                return;
-            }
-
-            pairBtn.disabled = true;
-            pairBtn.innerHTML = 'GENERATING...';
-            pairingStatus.textContent = 'Requesting pairing code...';
-            pairingStatus.style.color = '#00f2fe';
+            btn.disabled = true;
+            status.textContent = 'Generating...';
+            codeBox.style.display = 'none';
+            sessionBox.style.display = 'none';
 
             try {
-                const response = await fetch('/pair', {
+                const res = await fetch('/pair', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number: phoneNumber })
+                    body: JSON.stringify({ number })
                 });
-                const data = await response.json();
+                const data = await res.json();
 
                 if (data.success) {
-                    currentCode = data.code;
-                    pairCodeDisplay.textContent = 'CODE: ' + data.code;
-                    pairCodeDisplay.style.display = 'block';
-                    pairingStatus.textContent = 'Enter this code in WhatsApp > Linked Devices.';
-                    pairingStatus.style.color = '#00ff64';
+                    codeBox.textContent = data.code;
+                    codeBox.style.display = 'block';
+                    status.textContent = 'Enter this code in WhatsApp.';
+                    startMonitoring(data.sessionKey);
                 } else {
-                    pairingStatus.textContent = 'Error: ' + (data.message || 'Failed to generate code.');
-                    pairingStatus.style.color = '#ff4757';
-                    pairCodeDisplay.style.display = 'none';
+                    status.textContent = 'Error: ' + data.message;
                 }
-            } catch (error) {
-                pairingStatus.textContent = 'Server error. Please try again later.';
-                pairingStatus.style.color = '#ff4757';
-                pairCodeDisplay.style.display = 'none';
+            } catch (e) {
+                status.textContent = 'Server error.';
             }
-            pairBtn.disabled = false;
-            pairBtn.innerHTML = 'GENERATE PAIRING CODE';
+            btn.disabled = false;
+        }
+
+        function startMonitoring(key) {
+            if (sessionCheckInterval) clearInterval(sessionCheckInterval);
+            const status = document.getElementById('pairing-status');
+            const sessionBox = document.getElementById('session-id-display');
+
+            sessionCheckInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/session-status/' + key);
+                    const data = await res.json();
+                    if (data.success && data.sessionId) {
+                        clearInterval(sessionCheckInterval);
+                        status.textContent = '✅ Connected! Session ID below:';
+                        sessionBox.textContent = data.sessionId;
+                        sessionBox.style.display = 'block';
+                    }
+                } catch (e) {}
+            }, 3000);
         }
 
         async function generateQRCode() {
-            const qrImage = document.getElementById('qr-image');
-            const qrStatus = document.getElementById('qr-status');
-            const qrBtn = document.getElementById('qr-btn');
+            const img = document.getElementById('qr-image');
+            const status = document.getElementById('qr-status');
+            const btn = document.getElementById('qr-btn');
 
-            qrBtn.disabled = true;
-            qrBtn.innerHTML = 'GENERATING QR...';
-            qrStatus.textContent = 'Generating QR Code...';
-            qrStatus.style.color = '#00f2fe';
-            qrImage.style.display = 'none';
+            btn.disabled = true;
+            status.textContent = 'Generating...';
 
             try {
-                const response = await fetch('/qr');
-                const data = await response.json();
-
-                if (data.success && data.qr) {
-                    qrImage.src = data.qr;
-                    qrImage.style.display = 'block';
-                    qrStatus.textContent = 'Scan this QR with WhatsApp > Linked Devices.';
-                    qrStatus.style.color = '#00ff64';
+                const res = await fetch('/qr');
+                const data = await res.json();
+                if (data.success) {
+                    img.src = data.qr;
+                    img.style.display = 'block';
+                    status.textContent = 'Scan QR in WhatsApp.';
+                    startMonitoring(data.sessionKey);
                 } else {
-                    qrStatus.textContent = 'Error: ' + (data.message || 'Failed to generate QR.');
-                    qrStatus.style.color = '#ff4757';
-                    qrImage.style.display = 'none';
+                    status.textContent = 'Error generating QR.';
                 }
-            } catch (error) {
-                qrStatus.textContent = 'Server error. Please try again later.';
-                qrStatus.style.color = '#ff4757';
-                qrImage.style.display = 'none';
+            } catch (e) {
+                status.textContent = 'Server error.';
             }
-            qrBtn.disabled = false;
-            qrBtn.innerHTML = 'GENERATE QR CODE';
+            btn.disabled = false;
         }
-
-        // Default to pairing code tab on load
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('pairing-code').style.display = 'block';
-            document.querySelector('.tab-button').classList.add('active');
-        });
     </script>
 </body>
 </html>
