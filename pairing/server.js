@@ -121,7 +121,7 @@ app.post('/pair', async (req, res) => {
     sessions.set(sessionKey, { status: 'starting', timestamp: Date.now() })
 
     let authDir = path.join(__dirname, 'auth_' + Date.now())
-    let resolved = false
+    let isResolved = false
 
     try {
         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
@@ -182,7 +182,7 @@ app.post('/pair', async (req, res) => {
                     await new Promise(r => setTimeout(r, 5000))
                     let code = await sock.requestPairingCode(cleanNumber)
                     if (code) {
-                        resolved = true
+                        isResolved = true
                         return res.json({ success: true, code: code, sessionKey })
                     }
                 } catch (err) {
@@ -195,8 +195,8 @@ app.post('/pair', async (req, res) => {
         await requestPairing()
 
     } catch (error) {
-        if (!resolved) {
-            resolved = true
+        if (!isResolved) {
+            isResolved = true
             sessions.set(sessionKey, { status: 'error', error: error.message })
             if (!res.headersSent) res.status(500).json({ success: false, message: error.message })
         }
