@@ -13,7 +13,6 @@ const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
 const QRCode = require('qrcode')
-const { HttpsProxyAgent } = require('https-proxy-agent')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -21,9 +20,6 @@ const PORT = process.env.PORT || 3000
 const msgRetryCounterCache = new NodeCache()
 const sessions = new Map()
 const mutex = new Mutex()
-
-// Proxy - Verified for WhatsApp
-const PROXY_URL = 'http://uozfexly:t6y5fclj7j2k@45.151.162.2:6441'
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -77,12 +73,12 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: Browsers.ubuntu('Chrome'), // Reliable browser string
-            agent: new HttpsProxyAgent(PROXY_URL), // Use proxy to avoid IP block
+            browser: Browsers.macOS('Desktop'), // High compatibility
             markOnlineOnConnect: true,
             msgRetryCounterCache,
-            connectTimeoutMs: 30000,
-            defaultQueryTimeoutMs: 0
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0,
+            keepAliveIntervalMs: 10000
         })
 
         sock.ev.on('creds.update', saveCreds)
@@ -107,7 +103,7 @@ app.post('/pair', async (req, res) => {
                             text: `*✅ MOMO-XMD Connected!*\n\n*Session ID:*\n\n${sessionId}\n\n_Copy this ID and use it in your bot configuration._` 
                         })
                     } catch (e) {
-                        console.log(`[ERROR] Failed to send message: ${e.message}`)
+                        console.log(`[ERROR] Message fail: ${e.message}`)
                     }
                 }
 
@@ -120,39 +116,36 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
                 console.log(`[CLOSED] ${cleanNumber} Reason: ${reason}`)
-                if (reason !== DisconnectReason.loggedOut && !isResolved) {
-                    // Re-try or handle error
-                }
             }
         })
 
-        // Faster request (2 seconds delay)
+        // Request after 3 seconds for better stability
         setTimeout(async () => {
             try {
                 if (isResolved) return
-                console.log(`[CODE] Requesting for ${cleanNumber}...`)
+                console.log(`[CODE] Requesting code for ${cleanNumber}...`)
                 let code = await sock.requestPairingCode(cleanNumber)
                 if (code && !isResolved) {
                     isResolved = true
-                    console.log(`[CODE] Generated: ${code}`)
+                    console.log(`[CODE] Success: ${code}`)
                     res.json({ success: true, code: code, sessionKey })
                 }
             } catch (err) {
-                console.log(`[ERROR] Pairing failed: ${err.message}`)
+                console.log(`[ERROR] Request fail: ${err.message}`)
                 if (!isResolved) {
                     isResolved = true
-                    res.status(500).json({ success: false, message: 'WhatsApp rejected the request. Try again.' })
+                    res.status(500).json({ success: false, message: 'WhatsApp rejected. Try again.' })
                 }
             }
-        }, 2000)
+        }, 3000)
 
-        // Safety timeout
+        // Timeout safety
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true
-                res.status(500).json({ success: false, message: 'Request timeout. Try again.' })
+                res.status(500).json({ success: false, message: 'Request timeout.' })
             }
-        }, 20000)
+        }, 25000)
 
     } catch (error) {
         if (!isResolved) {
