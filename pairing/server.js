@@ -13,6 +13,7 @@ const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
 const QRCode = require('qrcode')
+const { HttpsProxyAgent } = require('https-proxy-agent')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -20,6 +21,20 @@ const PORT = process.env.PORT || 3000
 const msgRetryCounterCache = new NodeCache()
 const sessions = new Map()
 const mutex = new Mutex()
+
+// Proxy List (Rotate for better success)
+const PROXIES = [
+    'http://uozfexly-rotate:t6y5fclj7j2k@p.webshare.io:80',
+    'http://uozfexly:t6y5fclj7j2k@45.151.162.2:6441',
+    'http://uozfexly:t6y5fclj7j2k@185.199.229.156:7492',
+    'http://uozfexly:t6y5fclj7j2k@185.199.228.14:8300',
+    'http://uozfexly:t6y5fclj7j2k@188.132.221.25:8133'
+]
+
+function getProxyAgent() {
+    const proxy = PROXIES[Math.floor(Math.random() * PROXIES.length)]
+    return new HttpsProxyAgent(proxy)
+}
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -132,7 +147,8 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: Browsers.macOS('Chrome'), // Standard browser string for validity
+            browser: ["Ubuntu", "Chrome", "20.0.04"], // Fixed browser string
+            agent: getProxyAgent(), // Use Proxy to avoid IP block
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -174,7 +190,7 @@ app.post('/pair', async (req, res) => {
         })
 
         const requestPairing = async () => {
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < 5; i++) {
                 try {
                     await new Promise(r => setTimeout(r, 3000))
                     pairingCode = await sock.requestPairingCode(cleanNumber)
@@ -184,9 +200,11 @@ app.post('/pair', async (req, res) => {
                     }
                 } catch (err) {
                     console.log(`Attempt ${i+1} failed: ${err.message}`)
+                    // Retry with different proxy if possible
+                    sock.opts.agent = getProxyAgent()
                 }
             }
-            throw new Error('Failed to generate pairing code.')
+            throw new Error('WhatsApp rejected the pairing request. Please try again in 5 minutes.')
         }
 
         await requestPairing()
