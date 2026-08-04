@@ -13,7 +13,6 @@ const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
 const QRCode = require('qrcode')
-const { HttpsProxyAgent } = require('https-proxy-agent')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -21,19 +20,6 @@ const PORT = process.env.PORT || 3000
 const msgRetryCounterCache = new NodeCache()
 const sessions = new Map()
 const mutex = new Mutex()
-
-// Proxy List - Verified format
-const PROXIES = [
-    'http://uozfexly:t6y5fclj7j2k@45.151.162.2:6441',
-    'http://uozfexly:t6y5fclj7j2k@185.199.229.156:7492',
-    'http://uozfexly:t6y5fclj7j2k@185.199.228.14:8300',
-    'http://uozfexly:t6y5fclj7j2k@188.132.221.25:8133'
-]
-
-function getProxyAgent() {
-    const proxy = PROXIES[Math.floor(Math.random() * PROXIES.length)]
-    return new HttpsProxyAgent(proxy)
-}
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -152,8 +138,7 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["Ubuntu", "Chrome", "20.0.04"],
-            agent: getProxyAgent(),
+            browser: ["Mac OS", "Chrome", "121.0.6167.140"],
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -202,8 +187,6 @@ app.post('/pair', async (req, res) => {
                     }
                 } catch (err) {
                     console.log(`Attempt ${i+1} failed: ${err.message}`)
-                    // Try with a different proxy for the next attempt
-                    sock.opts.agent = getProxyAgent()
                 }
             }
             throw new Error('Failed to generate pairing code. Please try again.')
