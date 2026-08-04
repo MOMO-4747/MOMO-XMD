@@ -7,7 +7,7 @@
     "node": "20.x"
   },
   "scripts": {
-    "start": "cd pairing && node server.js"
+    "start": "node main.js"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
