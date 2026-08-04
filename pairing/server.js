@@ -22,9 +22,8 @@ const msgRetryCounterCache = new NodeCache()
 const sessions = new Map()
 const mutex = new Mutex()
 
-// Proxy List (Rotate for better success)
+// Proxy List - Verified format
 const PROXIES = [
-    'http://uozfexly-rotate:t6y5fclj7j2k@p.webshare.io:80',
     'http://uozfexly:t6y5fclj7j2k@45.151.162.2:6441',
     'http://uozfexly:t6y5fclj7j2k@185.199.229.156:7492',
     'http://uozfexly:t6y5fclj7j2k@185.199.228.14:8300',
@@ -92,8 +91,12 @@ app.get('/qr', async (req, res) => {
             
             if (qr && !qrSent) {
                 qrSent = true
-                const qrImage = await QRCode.toDataURL(qr)
-                res.json({ success: true, qr: qrImage, sessionKey })
+                try {
+                    const qrImage = await QRCode.toDataURL(qr)
+                    res.json({ success: true, qr: qrImage, sessionKey })
+                } catch (e) {
+                    if (!res.headersSent) res.status(500).json({ success: false, message: 'QR generation failed' })
+                }
             }
 
             if (connection === 'open') {
@@ -116,7 +119,7 @@ app.get('/qr', async (req, res) => {
         })
 
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message })
+        if (!res.headersSent) res.status(500).json({ success: false, message: error.message })
     }
 })
 
@@ -131,8 +134,10 @@ app.post('/pair', async (req, res) => {
     const sessionKey = 'momo_' + Date.now()
     sessions.set(sessionKey, { status: 'starting', timestamp: Date.now() })
 
+    let authDir = path.join(__dirname, 'auth_' + Date.now())
+    let resolved = false
+
     try {
-        const authDir = path.join(__dirname, 'auth_' + Date.now())
         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
         fs.mkdirSync(authDir, { recursive: true })
 
@@ -147,8 +152,8 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["Ubuntu", "Chrome", "20.0.04"], // Fixed browser string
-            agent: getProxyAgent(), // Use Proxy to avoid IP block
+            browser: ["Ubuntu", "Chrome", "20.0.04"],
+            agent: getProxyAgent(),
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -156,9 +161,6 @@ app.post('/pair', async (req, res) => {
         })
 
         sock.ev.on('creds.update', saveCreds)
-
-        let pairingCode = null
-        let resolved = false
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update
@@ -192,19 +194,19 @@ app.post('/pair', async (req, res) => {
         const requestPairing = async () => {
             for (let i = 0; i < 5; i++) {
                 try {
-                    await new Promise(r => setTimeout(r, 3000))
-                    pairingCode = await sock.requestPairingCode(cleanNumber)
-                    if (pairingCode) {
+                    await new Promise(r => setTimeout(r, 5000))
+                    let code = await sock.requestPairingCode(cleanNumber)
+                    if (code) {
                         resolved = true
-                        return res.json({ success: true, code: pairingCode, sessionKey })
+                        return res.json({ success: true, code: code, sessionKey })
                     }
                 } catch (err) {
                     console.log(`Attempt ${i+1} failed: ${err.message}`)
-                    // Retry with different proxy if possible
+                    // Try with a different proxy for the next attempt
                     sock.opts.agent = getProxyAgent()
                 }
             }
-            throw new Error('WhatsApp rejected the pairing request. Please try again in 5 minutes.')
+            throw new Error('Failed to generate pairing code. Please try again.')
         }
 
         await requestPairing()
@@ -213,7 +215,13 @@ app.post('/pair', async (req, res) => {
         if (!resolved) {
             resolved = true
             sessions.set(sessionKey, { status: 'error', error: error.message })
-            res.status(500).json({ success: false, message: error.message })
+            if (!res.headersSent) res.status(500).json({ success: false, message: error.message })
+        }
+        // Cleanup on error
+        if (fs.existsSync(authDir)) {
+            setTimeout(() => {
+                try { fs.rmSync(authDir, { recursive: true, force: true }) } catch (e) {}
+            }, 5000)
         }
     } finally {
         release()
