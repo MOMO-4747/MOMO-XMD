@@ -12,6 +12,7 @@ const pino = require('pino')
 const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
+const { SocksProxyAgent } = require('socks-proxy-agent')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -19,6 +20,10 @@ const PORT = process.env.PORT || 3000
 const msgRetryCounterCache = new NodeCache()
 const sessions = new Map()
 const mutex = new Mutex()
+
+// Webshare SOCKS5 Proxy - to bypass WhatsApp IP block
+const PROXY_URL = 'socks5://uozfexly:t6y5fclj7j2k@45.151.162.2:6441'
+const agent = new SocksProxyAgent(PROXY_URL)
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -39,12 +44,12 @@ app.get('/session-status/:key', (req, res) => {
 })
 
 app.post('/pair', async (req, res) => {
-    console.log(`[PAIR] Request for: ${req.body.number}`)
-    
     const { number } = req.body
     if (!number) return res.status(400).json({ success: false, message: 'Number required' })
     
     let cleanNumber = String(number).replace(/[^0-9]/g, '')
+    console.log(`\n[PAIR] New request for: ${cleanNumber}`)
+
     const release = await mutex.acquire()
     const sessionKey = 'momo_' + Date.now()
     sessions.set(sessionKey, { status: 'starting', timestamp: Date.now() })
@@ -67,8 +72,8 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            // Exact string requested by user
             browser: ["Ubuntu", "Chrome", "20.0.04"], 
+            agent: agent, // Use SOCKS5 Proxy
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -88,8 +93,8 @@ app.post('/pair', async (req, res) => {
             }
 
             if (connection === 'open') {
-                console.log(`[SOCKET] ${cleanNumber} CONNECTED!`)
-                await new Promise(r => setTimeout(r, 5000)) // Longer wait for sync
+                console.log(`[SUCCESS] ${cleanNumber} CONNECTED!`)
+                await new Promise(r => setTimeout(r, 2000))
                 await saveCreds()
                 
                 const credsFile = path.join(authDir, 'creds.json')
@@ -116,14 +121,14 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
-                console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`)
+                console.log(`[SOCKET] ${cleanNumber} closed. Reason: ${reason}`)
             }
         })
 
         setTimeout(async () => {
             try {
                 if (isResolved) return
-                console.log(`[SOCKET] Fetching code for ${cleanNumber}...`)
+                console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
                 let code = await sock.requestPairingCode(cleanNumber)
                 if (code && !isResolved) {
                     isResolved = true
