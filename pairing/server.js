@@ -148,7 +148,7 @@ app.post('/pair', async (req, res) => {
         sock.ev.on('creds.update', saveCreds)
 
         sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect } = update
+            const { connection } = update
             
             if (connection === 'open') {
                 console.log(`[SUCCESS] ${cleanNumber} connected!`)
@@ -179,7 +179,8 @@ app.post('/pair', async (req, res) => {
         const requestPairing = async () => {
             for (let i = 0; i < 5; i++) {
                 try {
-                    await new Promise(r => setTimeout(r, 5000))
+                    // Wait for the socket to be ready
+                    await new Promise(r => setTimeout(r, 10000))
                     let code = await sock.requestPairingCode(cleanNumber)
                     if (code) {
                         isResolved = true
@@ -187,9 +188,11 @@ app.post('/pair', async (req, res) => {
                     }
                 } catch (err) {
                     console.log(`Attempt ${i+1} failed: ${err.message}`)
+                    // If connection closed, we might need to recreate the socket, 
+                    // but let's try a few more times with a longer delay first.
                 }
             }
-            throw new Error('Failed to generate pairing code. Please try again.')
+            throw new Error('WhatsApp rejected the pairing request. Please try again in 5 minutes.')
         }
 
         await requestPairing()
