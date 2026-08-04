@@ -1,1 +1,1 @@
-web: node heroku-pairing.js
+web: cd pairing && node server.js
