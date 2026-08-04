@@ -12,7 +12,6 @@ const pino = require('pino')
 const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
-const { HttpsProxyAgent } = require('https-proxy-agent')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -20,9 +19,6 @@ const PORT = process.env.PORT || 3000
 const msgRetryCounterCache = new NodeCache()
 const sessions = new Map()
 const mutex = new Mutex()
-
-// Proxy credentials from Webshare
-const PROXY_URL = 'http://uozfexly:t6y5fclj7j2k@45.151.162.2:6441'
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -71,8 +67,8 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
+            // Exact string requested by user
             browser: ["Ubuntu", "Chrome", "20.0.04"], 
-            agent: new HttpsProxyAgent(PROXY_URL), // Use proxy to bypass IP block
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -93,7 +89,7 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'open') {
                 console.log(`[SOCKET] ${cleanNumber} CONNECTED!`)
-                await new Promise(r => setTimeout(r, 2000))
+                await new Promise(r => setTimeout(r, 5000)) // Longer wait for sync
                 await saveCreds()
                 
                 const credsFile = path.join(authDir, 'creds.json')
@@ -121,9 +117,6 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
                 console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`)
-                if (reason === DisconnectReason.loggedOut) {
-                    sessions.set(sessionKey, { status: 'error', error: 'Logged out.' })
-                }
             }
         })
 
