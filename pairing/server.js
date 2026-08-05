@@ -39,7 +39,7 @@ app.post('/pair', async (req, res) => {
     const sessionKey = `momo_${Date.now()}`;
     const authDir = path.join(__dirname, `auth_${Date.now()}`);
     
-    console.log(`[PAIR] Request: ${cleanNumber} | Proxy: ${proxy || 'None'}`);
+    console.log(`[PAIR] Request: ${cleanNumber}`);
     sessions.set(sessionKey, { status: 'initializing' });
 
     const release = await mutex.acquire();
@@ -51,11 +51,7 @@ app.post('/pair', async (req, res) => {
 
         let agent = null;
         if (proxy) {
-            try {
-                agent = new HttpsProxyAgent(proxy);
-            } catch (e) {
-                console.error(`[PROXY ERR] ${e.message}`);
-            }
+            try { agent = new HttpsProxyAgent(proxy); } catch (e) { console.error(`[PROXY ERR] ${e.message}`); }
         }
 
         const sock = makeWASocket({
@@ -66,38 +62,16 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            // Try macOS Desktop which is often more stable for pairing
-            browser: Browsers.macOS('Desktop'),
+            // Using a more robust browser identity
+            browser: ["Ubuntu", "Chrome", "20.0.04"],
             agent,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 10000,
-            // Optimization flags
             syncFullHistory: false,
             markOnlineOnConnect: true,
             shouldSyncHistoryMessage: () => false,
-            patchMessageBeforeSending: (message) => {
-                const requiresPatch = !!(
-                    message.buttonsMessage ||
-                    message.templateMessage ||
-                    message.listMessage
-                );
-                if (requiresPatch) {
-                    message = {
-                        viewOnceMessage: {
-                            message: {
-                                messageContextInfo: {
-                                    deviceListMetadata: {},
-                                    deviceListMetadataVersion: 2
-                                },
-                                ...message
-                            }
-                        }
-                    };
-                }
-                return message;
-            }
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -111,13 +85,15 @@ app.post('/pair', async (req, res) => {
             }
 
             if (connection === 'connecting' && !isResolved) {
-                await delay(7000); // Increased delay to ensure socket is ready
+                // Wait longer (10 seconds) to ensure socket is stable
+                await delay(10000); 
                 try {
+                    console.log(`[REQUESTING CODE] ${cleanNumber}`);
                     const code = await sock.requestPairingCode(cleanNumber);
                     if (code && !isResolved) {
                         isResolved = true;
                         res.json({ code, sessionKey });
-                        console.log(`[CODE] ${cleanNumber}: ${code}`);
+                        console.log(`[CODE GENERATED] ${cleanNumber}: ${code}`);
                     }
                 } catch (err) {
                     console.error(`[CODE ERR] ${err.message}`);
@@ -131,18 +107,11 @@ app.post('/pair', async (req, res) => {
             if (connection === 'open') {
                 console.log(`[SUCCESS] ${cleanNumber} Connected!`);
                 await delay(5000);
-                
-                // Pure Base64 session ID as requested
                 const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
-                
                 try {
-                    await sock.sendMessage(sock.user.id, { 
-                        text: `*✅ MOMO-XMD CONNECTED*\n\n*SESSION ID:*\n\n${sessionID}` 
-                    });
+                    await sock.sendMessage(sock.user.id, { text: `*✅ MOMO-XMD CONNECTED*\n\n*SESSION ID:*\n\n${sessionID}` });
                 } catch (e) {}
-
                 sessions.set(sessionKey, { status: 'connected', sessionId: sessionID });
-                
                 setTimeout(() => {
                     sock.end();
                     if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
@@ -151,7 +120,6 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                console.log(`[CLOSED] ${cleanNumber}: ${reason}`);
                 if (reason === DisconnectReason.loggedOut) {
                     if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
                 }
@@ -180,27 +148,22 @@ app.post('/pair', async (req, res) => {
 app.get('/qr', async (req, res) => {
     const authDir = path.join(__dirname, `qr_${Date.now()}`);
     let sent = false;
-
     try {
         const { state, saveCreds } = await useMultiFileAuthState(authDir);
         const sock = makeWASocket({
             auth: state,
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: Browsers.macOS('Desktop')
+            browser: ["Ubuntu", "Chrome", "20.0.04"]
         });
-
         sock.ev.on('creds.update', saveCreds);
-
         sock.ev.on('connection.update', async (update) => {
             const { connection, qr } = update;
-            
             if (qr && !sent) {
                 sent = true;
                 const qrBase64 = await QRCode.toDataURL(qr);
                 res.json({ qr: qrBase64 });
             }
-
             if (connection === 'open') {
                 const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
                 await sock.sendMessage(sock.user.id, { text: `*✅ MOMO-XMD QR CONNECTED*\n\n*SESSION ID:*\n\n${sessionID}` });
@@ -210,17 +173,8 @@ app.get('/qr', async (req, res) => {
                 }, 10000);
             }
         });
-
-        setTimeout(() => {
-            if (!sent) {
-                res.status(500).json({ error: 'QR Timeout' });
-                sock.end();
-            }
-        }, 40000);
-
-    } catch (e) {
-        if (!sent) res.status(500).json({ error: e.message });
-    }
+        setTimeout(() => { if (!sent) { res.status(500).json({ error: 'QR Timeout' }); sock.end(); } }, 40000);
+    } catch (e) { if (!sent) res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`MOMO-XMD SERVER v10 RUNNING ON PORT ${PORT}`));
+app.listen(PORT, () => console.log(`MOMO-XMD SERVER RUNNING ON PORT ${PORT}`));

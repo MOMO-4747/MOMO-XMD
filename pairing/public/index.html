@@ -19,8 +19,7 @@
 
         body {
             background-color: var(--bg);
-            background-image: 
-                radial-gradient(circle at 50% 50%, #001a33 0%, #000510 100%);
+            background-image: radial-gradient(circle at 50% 50%, #001a33 0%, #000510 100%);
             color: var(--primary);
             font-family: 'Share Tech Mono', monospace;
             display: flex;
@@ -28,21 +27,13 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            overflow: hidden;
+            overflow-x: hidden;
             position: relative;
         }
 
-        /* Lightning Effect */
         .lightning {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: white;
-            opacity: 0;
-            z-index: 100;
-            pointer-events: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; opacity: 0; z-index: 100; pointer-events: none;
         }
 
         @keyframes strike {
@@ -54,30 +45,18 @@
             100% { opacity: 0; }
         }
 
-        .strike-anim {
-            animation: strike 0.5s ease-out;
-        }
+        .strike-anim { animation: strike 0.5s ease-out; }
 
-        /* Scrolling Text */
         .marquee {
-            position: fixed;
-            top: 0;
-            width: 100%;
+            position: fixed; top: 0; width: 100%;
             background: rgba(0, 85, 255, 0.2);
             border-bottom: 1px solid var(--primary);
-            padding: 10px 0;
-            white-space: nowrap;
-            overflow: hidden;
-            z-index: 10;
+            padding: 10px 0; white-space: nowrap; overflow: hidden; z-index: 10;
         }
 
         .marquee-content {
-            display: inline-block;
-            animation: scroll 20s linear infinite;
-            font-size: 1.2rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 5px;
+            display: inline-block; animation: scroll 20s linear infinite;
+            font-size: 1.2rem; font-weight: bold; text-transform: uppercase; letter-spacing: 5px;
         }
 
         @keyframes scroll {
@@ -85,30 +64,17 @@
             to { transform: translateX(-100%); }
         }
 
-        .container {
-            width: 100%;
-            max-width: 500px;
-            padding: 20px;
-            z-index: 5;
-        }
+        .container { width: 100%; max-width: 500px; padding: 20px; z-index: 5; }
 
         .card {
-            background: var(--card-bg);
-            border: 2px solid var(--primary);
-            border-radius: 15px;
-            padding: 40px;
-            box-shadow: var(--glow);
-            position: relative;
-            backdrop-filter: blur(5px);
-            text-align: center;
+            background: var(--card-bg); border: 2px solid var(--primary);
+            border-radius: 15px; padding: 40px; box-shadow: var(--glow);
+            position: relative; backdrop-filter: blur(5px); text-align: center;
         }
 
         .skull-icon {
-            font-size: 5rem;
-            color: var(--primary);
-            text-shadow: var(--glow);
-            margin-bottom: 20px;
-            animation: pulse 2s infinite;
+            font-size: 5rem; color: var(--primary); text-shadow: var(--glow);
+            margin-bottom: 20px; animation: pulse 2s infinite;
         }
 
         @keyframes pulse {
@@ -117,192 +83,74 @@
             100% { transform: scale(1); opacity: 0.8; }
         }
 
-        .logo {
-            font-family: 'Nosifer', cursive;
-            font-size: 2.5rem;
-            color: var(--primary);
-            text-shadow: var(--text-glow);
-            margin-bottom: 10px;
-        }
+        .logo { font-family: 'Nosifer', cursive; font-size: 2.5rem; color: var(--primary); text-shadow: var(--text-glow); margin-bottom: 10px; }
+        .subtitle { font-size: 0.8rem; letter-spacing: 2px; margin-bottom: 30px; color: #88ccff; text-transform: uppercase; }
 
-        .subtitle {
-            font-size: 0.8rem;
-            letter-spacing: 2px;
-            margin-bottom: 30px;
-            color: #88ccff;
-            text-transform: uppercase;
-        }
-
-        .tabs {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-
+        .tabs { display: flex; gap: 15px; margin-bottom: 25px; }
         .tab {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid var(--primary);
-            border-radius: 5px;
-            cursor: pointer;
-            transition: 0.3s;
-            text-transform: uppercase;
-            font-weight: bold;
+            flex: 1; padding: 12px; border: 1px solid var(--primary); border-radius: 5px;
+            cursor: pointer; transition: 0.3s; text-transform: uppercase; font-weight: bold;
             background: rgba(0, 212, 255, 0.05);
         }
+        .tab.active { background: var(--primary); color: #000; box-shadow: 0 0 15px var(--primary); }
 
-        .tab.active {
-            background: var(--primary);
-            color: #000;
-            box-shadow: 0 0 15px var(--primary);
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            color: #88ccff;
-        }
-
+        .form-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; margin-bottom: 8px; font-size: 0.7rem; text-transform: uppercase; color: #88ccff; }
         input {
-            width: 100%;
-            padding: 15px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid var(--primary);
-            color: var(--primary);
-            font-family: 'Share Tech Mono', monospace;
-            box-sizing: border-box;
-            outline: none;
-            font-size: 1.1rem;
-            border-radius: 5px;
-        }
-
-        input:focus {
-            box-shadow: 0 0 10px var(--primary);
+            width: 100%; padding: 15px; background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--primary); color: var(--primary);
+            font-family: 'Share Tech Mono', monospace; box-sizing: border-box;
+            outline: none; font-size: 1.1rem; border-radius: 5px;
         }
 
         button {
-            width: 100%;
-            padding: 18px;
-            background: transparent;
-            border: 2px solid var(--primary);
-            color: var(--primary);
-            font-family: 'Share Tech Mono', monospace;
-            font-weight: bold;
-            font-size: 1.1rem;
-            cursor: pointer;
-            text-transform: uppercase;
-            transition: 0.3s;
-            margin-top: 10px;
-            border-radius: 5px;
+            width: 100%; padding: 18px; background: transparent; border: 2px solid var(--primary);
+            color: var(--primary); font-family: 'Share Tech Mono', monospace;
+            font-weight: bold; font-size: 1.1rem; cursor: pointer;
+            text-transform: uppercase; transition: 0.3s; margin-top: 10px; border-radius: 5px;
         }
+        button:hover { background: var(--primary); color: #000; box-shadow: var(--glow); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        button:hover {
-            background: var(--primary);
-            color: #000;
-            box-shadow: var(--glow);
+        #result { margin-top: 30px; display: none; border-top: 1px solid var(--primary); padding-top: 20px; }
+        
+        .code-box {
+            margin: 20px 0; padding: 20px; background: rgba(0, 212, 255, 0.1);
+            border: 2px dashed var(--primary); border-radius: 10px;
         }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        #result {
-            margin-top: 30px;
-            display: none;
-            border-top: 1px solid var(--primary);
-            padding-top: 20px;
-        }
-
         #pairing-code {
-            font-size: 2.8rem;
-            font-weight: bold;
-            color: white;
-            text-shadow: 0 0 20px var(--primary);
-            letter-spacing: 10px;
-            padding: 20px;
-            background: rgba(0, 212, 255, 0.1);
-            border: 1px dashed var(--primary);
-            display: inline-block;
-            cursor: pointer;
-            margin: 15px 0;
-            border-radius: 10px;
+            font-size: 2.5rem; font-weight: bold; color: white;
+            text-shadow: 0 0 20px var(--primary); letter-spacing: 8px;
+            margin-bottom: 15px; display: block;
+        }
+        .copy-btn {
+            background: var(--primary); color: black; border: none;
+            padding: 10px 20px; font-family: 'Share Tech Mono', monospace;
+            font-weight: bold; cursor: pointer; border-radius: 5px;
+            text-transform: uppercase; width: auto; margin: 0 auto;
         }
 
-        .copy-hint {
-            font-size: 0.7rem;
-            color: #88ccff;
-            margin-bottom: 10px;
+        .instructions {
+            text-align: left; font-size: 0.75rem; color: #88ccff; margin-top: 20px;
+            background: rgba(0, 0, 0, 0.3); padding: 15px; border-radius: 5px;
+            border-left: 3px solid var(--primary);
         }
 
-        #qr-image {
-            width: 250px;
-            height: 250px;
-            border: 3px solid var(--primary);
-            padding: 5px;
-            background: white;
-            margin: 0 auto;
-            border-radius: 10px;
-        }
+        #qr-image { width: 250px; height: 250px; border: 3px solid var(--primary); padding: 5px; background: white; margin: 0 auto; border-radius: 10px; }
+        .loader { margin: 20px 0; display: none; }
+        .loader i { font-size: 3rem; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        .loader {
-            margin: 20px 0;
-            display: none;
-        }
-
-        .loader i {
-            font-size: 3rem;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .footer {
-            margin-top: 30px;
-            text-align: center;
-            font-size: 0.8rem;
-            color: #5588ff;
-            text-transform: uppercase;
-        }
-
-        .owner {
-            color: var(--primary);
-            font-weight: bold;
-            text-shadow: 0 0 5px var(--primary);
-        }
+        .footer { margin-top: 30px; text-align: center; font-size: 0.8rem; color: #5588ff; text-transform: uppercase; }
+        .owner { color: var(--primary); font-weight: bold; text-shadow: 0 0 5px var(--primary); }
 
         .notification {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: var(--primary);
-            color: #000;
-            padding: 20px 40px;
-            border-radius: 10px;
-            box-shadow: var(--glow);
-            display: none;
-            z-index: 1000;
-            font-weight: bold;
-            font-size: 1.5rem;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: var(--primary); color: #000; padding: 20px 40px;
+            border-radius: 10px; box-shadow: var(--glow); display: none;
+            z-index: 1000; font-weight: bold; font-size: 1.5rem;
         }
-
-        .status-msg {
-            font-size: 0.9rem;
-            margin-top: 15px;
-            color: var(--primary);
-            font-weight: bold;
-        }
+        .status-msg { font-size: 0.9rem; margin-top: 15px; color: var(--primary); font-weight: bold; }
     </style>
 </head>
 <body>
@@ -331,10 +179,6 @@
                     <label>Terminal Input: WhatsApp Number</label>
                     <input type="text" id="number" placeholder="+255..." autocomplete="off">
                 </div>
-                <div class="form-group">
-                    <label>Proxy Node (Optional)</label>
-                    <input type="text" id="proxy" placeholder="http://ip:port" autocomplete="off">
-                </div>
                 <button id="btn-submit" onclick="submit()">Initialize Link</button>
             </div>
 
@@ -351,8 +195,19 @@
             <div id="result">
                 <div id="pairing-display" style="display: none;">
                     <p>PAIRING CODE GENERATED:</p>
-                    <div id="pairing-code" onclick="copyCode()"></div>
-                    <div class="copy-hint">CLICK TO COPY CODE</div>
+                    <div class="code-box">
+                        <span id="pairing-code">--------</span>
+                        <button class="copy-btn" onclick="copyCode()">Copy Code</button>
+                    </div>
+                    
+                    <div class="instructions">
+                        <strong>NO NOTIFICATION?</strong><br>
+                        1. Open WhatsApp > Settings<br>
+                        2. Linked Devices > Link a Device<br>
+                        3. Select "Link with phone number instead"<br>
+                        4. Enter the code shown above.
+                    </div>
+
                     <div class="status-msg" id="status-msg">WAITING FOR WHATSAPP...</div>
                 </div>
                 
@@ -373,7 +228,6 @@
         let mode = 'pairing';
         let pollInterval = null;
 
-        // Lightning effect
         setInterval(() => {
             if (Math.random() > 0.95) {
                 const l = document.getElementById('lightning');
@@ -401,7 +255,6 @@
 
         async function submit() {
             const num = document.getElementById('number').value;
-            const proxy = document.getElementById('proxy').value;
             if (!num) return showNotification('NUMBER REQUIRED');
             
             toggleLoading(true);
@@ -409,7 +262,7 @@
                 const res = await fetch('/pair', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number: num, proxy: proxy })
+                    body: JSON.stringify({ number: num })
                 });
                 const data = await res.json();
                 if (data.code) {
@@ -417,18 +270,12 @@
                     document.getElementById('pairing-display').style.display = 'block';
                     document.getElementById('qr-display').style.display = 'none';
                     document.getElementById('result').style.display = 'block';
-                    
-                    if (data.sessionKey) {
-                        startPolling(data.sessionKey);
-                    }
+                    if (data.sessionKey) startPolling(data.sessionKey);
                 } else {
                     showNotification(data.message || 'LINK FAILED');
                 }
-            } catch (e) { 
-                showNotification('SERVER ERROR'); 
-            } finally { 
-                toggleLoading(false); 
-            }
+            } catch (e) { showNotification('SERVER ERROR'); }
+            finally { toggleLoading(false); }
         }
 
         async function getQR() {
@@ -441,14 +288,9 @@
                     document.getElementById('qr-display').style.display = 'block';
                     document.getElementById('pairing-display').style.display = 'none';
                     document.getElementById('result').style.display = 'block';
-                } else {
-                    showNotification(data.error || 'QR FAILED');
-                }
-            } catch (e) { 
-                showNotification('SERVER ERROR'); 
-            } finally { 
-                toggleLoading(false); 
-            }
+                } else { showNotification(data.error || 'QR FAILED'); }
+            } catch (e) { showNotification('SERVER ERROR'); }
+            finally { toggleLoading(false); }
         }
 
         function toggleLoading(on) {
@@ -460,6 +302,7 @@
 
         function copyCode() {
             const code = document.getElementById('pairing-code').innerText;
+            if (code === '--------') return;
             navigator.clipboard.writeText(code);
             showNotification('CODE COPIED!');
         }
@@ -471,7 +314,6 @@
                     const res = await fetch(`/session-status/${key}`);
                     const data = await res.json();
                     const msgEl = document.getElementById('status-msg');
-                    
                     if (data.status === 'open' || data.status === 'connected') {
                         msgEl.innerHTML = '<span style="color:#fff; text-shadow: 0 0 10px #00ff00;">LINK SUCCESSFUL! SESSION SENT.</span>';
                         stopPolling();
@@ -485,10 +327,7 @@
             }, 3000);
         }
 
-        function stopPolling() {
-            if (pollInterval) clearInterval(pollInterval);
-            pollInterval = null;
-        }
+        function stopPolling() { if (pollInterval) clearInterval(pollInterval); pollInterval = null; }
     </script>
 </body>
 </html>
