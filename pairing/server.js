@@ -51,6 +51,7 @@ app.post('/pair', async (req, res) => {
 
     let authDir = path.join(__dirname, 'auth_' + Date.now())
     let isResolved = false
+    let sock = null
 
     try {
         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
@@ -59,7 +60,7 @@ app.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
-        const sock = makeWASocket({
+        sock = makeWASocket({
             version,
             auth: {
                 creds: state.creds,
@@ -67,8 +68,8 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            // Official string from user
-            browser: ["Ubuntu", "Chrome", "20.0.04"], 
+            // Official browser setting as suggested
+            browser: Browsers.ubuntu("Chrome"), 
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -108,26 +109,30 @@ app.post('/pair', async (req, res) => {
                     }
                 }
 
+                // Wait a bit more before cleaning up to ensure message is sent
                 setTimeout(() => {
                     try { sock.end(undefined) } catch (e) {}
                     if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
-                }, 10000)
+                }, 15000)
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
-                const message = lastDisconnect?.error?.message
-                console.log(`[SOCKET] ${cleanNumber} closed: ${reason} (${message})`)
-                if (reason === DisconnectReason.loggedOut) {
-                    sessions.set(sessionKey, { status: 'error', error: 'Logged out.' })
+                console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`)
+                
+                // Only resolve error if we haven't gotten a code yet
+                if (!isResolved && reason !== DisconnectReason.loggedOut) {
+                    // We don't resolve here to allow retries or timeout to handle it
                 }
             }
         })
 
-        // Request pairing code after 3 seconds
-        setTimeout(async () => {
+        // Request pairing code only when connecting or starting
+        let codeSent = false
+        const getCode = async () => {
+            if (codeSent || isResolved) return
+            codeSent = true
             try {
-                if (isResolved) return
                 console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
                 let code = await sock.requestPairingCode(cleanNumber)
                 if (code && !isResolved) {
@@ -142,14 +147,18 @@ app.post('/pair', async (req, res) => {
                     res.status(500).json({ success: false, message: `WhatsApp rejected request: ${err.message}` })
                 }
             }
-        }, 3000)
+        }
 
+        // Give it a small delay to ensure socket is ready to request code
+        setTimeout(getCode, 3000)
+
+        // Global timeout for the HTTP request
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true
                 res.status(500).json({ success: false, message: 'Timeout.' })
             }
-        }, 40000)
+        }, 45000)
 
     } catch (error) {
         console.log(`[FATAL] ${error.message}`)
