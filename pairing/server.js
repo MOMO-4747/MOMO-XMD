@@ -12,7 +12,6 @@ const pino = require('pino')
 const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
-const { HttpsProxyAgent } = require('https-proxy-agent')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -20,10 +19,6 @@ const PORT = process.env.PORT || 3000
 const msgRetryCounterCache = new NodeCache()
 const sessions = new Map()
 const mutex = new Mutex()
-
-// Webshare Proxy - Trying HTTP protocol instead of SOCKS5
-const PROXY_URL = 'http://uozfexly:t6y5fclj7j2k@45.151.162.2:6441'
-const agent = new HttpsProxyAgent(PROXY_URL)
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -33,20 +28,6 @@ app.use(express.static(publicPath))
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(publicPath, 'index.html'))
-})
-
-// Test route to check if proxy is working
-app.get('/test-proxy', async (req, res) => {
-    try {
-        const axios = require('axios')
-        const response = await axios.get('https://api.ipify.org?format=json', {
-            proxy: false,
-            httpsAgent: agent
-        })
-        res.json({ success: true, ip: response.data.ip })
-    } catch (e) {
-        res.json({ success: false, error: e.message })
-    }
 })
 
 app.get('/session-status/:key', (req, res) => {
@@ -76,7 +57,9 @@ app.post('/pair', async (req, res) => {
         fs.mkdirSync(authDir, { recursive: true })
 
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
-        const { version } = await fetchLatestBaileysVersion()
+        
+        // Use a stable version instead of fetching latest every time
+        const version = [2, 3000, 1015901307] 
 
         const sock = makeWASocket({
             version,
@@ -86,9 +69,8 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            // Official browser string requested by user
+            // Official string from user
             browser: ["Ubuntu", "Chrome", "20.0.04"], 
-            agent: agent,
             markOnlineOnConnect: true,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -137,17 +119,14 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
                 console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`)
-                if (reason === DisconnectReason.loggedOut) {
-                    sessions.set(sessionKey, { status: 'error', error: 'Logged out.' })
-                }
             }
         })
 
-        // Request pairing code after 5 seconds to ensure proxy handshake
-        setTimeout(async () => {
+        // Request pairing code with retry logic
+        const getCode = async (retryCount = 0) => {
             try {
                 if (isResolved) return
-                console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
+                console.log(`[SOCKET] Fetching code for ${cleanNumber} (Attempt ${retryCount + 1})...`)
                 let code = await sock.requestPairingCode(cleanNumber)
                 if (code && !isResolved) {
                     isResolved = true
@@ -155,20 +134,26 @@ app.post('/pair', async (req, res) => {
                     res.json({ success: true, code: code, sessionKey })
                 }
             } catch (err) {
-                console.log(`[SOCKET] Error: ${err.message}`)
+                console.log(`[SOCKET] Error on attempt ${retryCount + 1}: ${err.message}`)
+                if (retryCount < 2 && !isResolved) {
+                    await new Promise(r => setTimeout(r, 3000))
+                    return getCode(retryCount + 1)
+                }
                 if (!isResolved) {
                     isResolved = true
                     res.status(500).json({ success: false, message: `WhatsApp rejected request: ${err.message}` })
                 }
             }
-        }, 5000)
+        }
+
+        setTimeout(() => getCode(), 3000)
 
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true
                 res.status(500).json({ success: false, message: 'Timeout.' })
             }
-        }, 30000)
+        }, 40000)
 
     } catch (error) {
         console.log(`[FATAL] ${error.message}`)
