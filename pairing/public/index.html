@@ -3,26 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MOMO-XMD | DARK WEB PAIRING</title>
+    <title>MOMO-XMD | BLUE DARK WEB</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Creepster&family=Nosifer&family=Share+Tech+Mono&display=swap');
 
         :root {
-            --primary: #00ff00;
-            --secondary: #ff0000;
-            --bg: #050505;
-            --card-bg: rgba(10, 10, 10, 0.9);
-            --glow: 0 0 10px #00ff00, 0 0 20px #00ff00;
-            --red-glow: 0 0 10px #ff0000, 0 0 20px #ff0000;
+            --primary: #00d4ff;
+            --secondary: #0055ff;
+            --bg: #000510;
+            --card-bg: rgba(0, 10, 30, 0.9);
+            --glow: 0 0 15px var(--primary), 0 0 30px var(--secondary);
+            --text-glow: 0 0 10px var(--primary);
         }
 
         body {
             background-color: var(--bg);
             background-image: 
-                linear-gradient(rgba(0, 255, 0, 0.05) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 255, 0, 0.05) 1px, transparent 1px);
-            background-size: 20px 20px;
+                radial-gradient(circle at 50% 50%, #001a33 0%, #000510 100%);
             color: var(--primary);
             font-family: 'Share Tech Mono', monospace;
             display: flex;
@@ -30,139 +28,184 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            overflow-x: hidden;
+            overflow: hidden;
+            position: relative;
         }
 
-        .matrix-bg {
+        /* Lightning Effect */
+        .lightning {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: -1;
-            opacity: 0.1;
+            background: white;
+            opacity: 0;
+            z-index: 100;
             pointer-events: none;
+        }
+
+        @keyframes strike {
+            0% { opacity: 0; }
+            5% { opacity: 0.3; }
+            10% { opacity: 0; }
+            15% { opacity: 0.5; }
+            20% { opacity: 0; }
+            100% { opacity: 0; }
+        }
+
+        .strike-anim {
+            animation: strike 0.5s ease-out;
+        }
+
+        /* Scrolling Text */
+        .marquee {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(0, 85, 255, 0.2);
+            border-bottom: 1px solid var(--primary);
+            padding: 10px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            z-index: 10;
+        }
+
+        .marquee-content {
+            display: inline-block;
+            animation: scroll 20s linear infinite;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+        }
+
+        @keyframes scroll {
+            from { transform: translateX(100%); }
+            to { transform: translateX(-100%); }
         }
 
         .container {
             width: 100%;
             max-width: 500px;
             padding: 20px;
-            z-index: 1;
+            z-index: 5;
         }
 
         .card {
             background: var(--card-bg);
             border: 2px solid var(--primary);
-            border-radius: 5px;
+            border-radius: 15px;
             padding: 40px;
             box-shadow: var(--glow);
             position: relative;
-            overflow: hidden;
+            backdrop-filter: blur(5px);
+            text-align: center;
         }
 
-        .card::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 2px;
-            background: var(--primary);
-            animation: scan 3s linear infinite;
+        .skull-icon {
+            font-size: 5rem;
+            color: var(--primary);
+            text-shadow: var(--glow);
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
         }
 
-        @keyframes scan {
-            0% { top: 0; }
-            100% { top: 100%; }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
         }
 
         .logo {
             font-family: 'Nosifer', cursive;
-            font-size: 3rem;
-            color: var(--secondary);
-            text-shadow: var(--red-glow);
+            font-size: 2.5rem;
+            color: var(--primary);
+            text-shadow: var(--text-glow);
             margin-bottom: 10px;
-            text-align: center;
         }
 
         .subtitle {
-            text-align: center;
-            font-size: 0.9rem;
-            letter-spacing: 3px;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
             margin-bottom: 30px;
-            color: var(--primary);
+            color: #88ccff;
             text-transform: uppercase;
         }
 
         .tabs {
             display: flex;
-            gap: 10px;
+            gap: 15px;
             margin-bottom: 25px;
         }
 
         .tab {
             flex: 1;
-            padding: 10px;
-            text-align: center;
+            padding: 12px;
             border: 1px solid var(--primary);
+            border-radius: 5px;
             cursor: pointer;
             transition: 0.3s;
             text-transform: uppercase;
             font-weight: bold;
+            background: rgba(0, 212, 255, 0.05);
         }
 
         .tab.active {
             background: var(--primary);
-            color: black;
-            box-shadow: var(--glow);
+            color: #000;
+            box-shadow: 0 0 15px var(--primary);
         }
 
         .form-group {
             margin-bottom: 20px;
+            text-align: left;
         }
 
         label {
             display: block;
             margin-bottom: 8px;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
+            color: #88ccff;
         }
 
         input {
             width: 100%;
-            padding: 12px;
-            background: #000;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--primary);
             color: var(--primary);
             font-family: 'Share Tech Mono', monospace;
             box-sizing: border-box;
             outline: none;
             font-size: 1.1rem;
+            border-radius: 5px;
         }
 
         input:focus {
-            box-shadow: 0 0 5px var(--primary);
+            box-shadow: 0 0 10px var(--primary);
         }
 
         button {
             width: 100%;
-            padding: 15px;
+            padding: 18px;
             background: transparent;
             border: 2px solid var(--primary);
             color: var(--primary);
             font-family: 'Share Tech Mono', monospace;
             font-weight: bold;
-            font-size: 1rem;
+            font-size: 1.1rem;
             cursor: pointer;
             text-transform: uppercase;
             transition: 0.3s;
             margin-top: 10px;
+            border-radius: 5px;
         }
 
         button:hover {
             background: var(--primary);
-            color: black;
+            color: #000;
             box-shadow: var(--glow);
         }
 
@@ -173,53 +216,49 @@
 
         #result {
             margin-top: 30px;
-            text-align: center;
             display: none;
-            border-top: 1px dashed var(--primary);
+            border-top: 1px solid var(--primary);
             padding-top: 20px;
         }
 
-        .pairing-code-container {
-            position: relative;
-            margin: 20px 0;
-        }
-
         #pairing-code {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             font-weight: bold;
-            color: var(--secondary);
-            text-shadow: var(--red-glow);
-            letter-spacing: 8px;
-            padding: 15px;
-            background: rgba(255, 0, 0, 0.1);
-            border: 1px solid var(--secondary);
+            color: white;
+            text-shadow: 0 0 20px var(--primary);
+            letter-spacing: 10px;
+            padding: 20px;
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px dashed var(--primary);
             display: inline-block;
             cursor: pointer;
+            margin: 15px 0;
+            border-radius: 10px;
         }
 
         .copy-hint {
             font-size: 0.7rem;
-            margin-top: 5px;
-            color: #888;
+            color: #88ccff;
+            margin-bottom: 10px;
         }
 
         #qr-image {
             width: 250px;
             height: 250px;
-            border: 2px solid var(--primary);
+            border: 3px solid var(--primary);
             padding: 5px;
             background: white;
             margin: 0 auto;
+            border-radius: 10px;
         }
 
         .loader {
-            text-align: center;
             margin: 20px 0;
             display: none;
         }
 
         .loader i {
-            font-size: 2rem;
+            font-size: 3rem;
             animation: spin 1s linear infinite;
         }
 
@@ -231,83 +270,60 @@
         .footer {
             margin-top: 30px;
             text-align: center;
-            font-size: 0.7rem;
-            color: #555;
+            font-size: 0.8rem;
+            color: #5588ff;
             text-transform: uppercase;
         }
 
         .owner {
-            color: var(--secondary);
-            font-weight: bold;
-        }
-
-        .glitch {
-            position: relative;
-        }
-
-        .glitch::before, .glitch::after {
-            content: attr(data-text);
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-
-        .glitch::before {
-            left: 2px;
-            text-shadow: -2px 0 #ff00c1;
-            clip: rect(44px, 450px, 56px, 0);
-            animation: glitch-anim 5s infinite linear alternate-reverse;
-        }
-
-        .glitch::after {
-            left: -2px;
-            text-shadow: -2px 0 #00fff9, 2px 2px #ff00c1;
-            animation: glitch-anim2 1s infinite linear alternate-reverse;
-        }
-
-        @keyframes glitch-anim {
-            0% { clip: rect(31px, 9999px, 94px, 0); }
-            20% { clip: rect(62px, 9999px, 42px, 0); }
-            40% { clip: rect(16px, 9999px, 78px, 0); }
-            60% { clip: rect(58px, 9999px, 13px, 0); }
-            80% { clip: rect(87px, 9999px, 5px, 0); }
-            100% { clip: rect(23px, 9999px, 98px, 0); }
-        }
-
-        .status-msg {
-            font-size: 0.8rem;
-            margin-top: 15px;
             color: var(--primary);
+            font-weight: bold;
+            text-shadow: 0 0 5px var(--primary);
         }
 
         .notification {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--secondary);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            box-shadow: var(--red-glow);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--primary);
+            color: #000;
+            padding: 20px 40px;
+            border-radius: 10px;
+            box-shadow: var(--glow);
             display: none;
-            z-index: 100;
+            z-index: 1000;
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+
+        .status-msg {
+            font-size: 0.9rem;
+            margin-top: 15px;
+            color: var(--primary);
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div class="matrix-bg" id="matrix"></div>
+    <div class="lightning" id="lightning"></div>
     <div class="notification" id="notification">CODE COPIED!</div>
+
+    <div class="marquee">
+        <div class="marquee-content">
+            WELCOME FOR MOMO-XMD • SECURE PAIRING PROTOCOL • SYSTEM ONLINE • WELCOME FOR MOMO-XMD • ENCRYPTED SESSION •
+        </div>
+    </div>
 
     <div class="container">
         <div class="card">
-            <div class="logo glitch" data-text="MOMO-XMD">MOMO-XMD</div>
-            <div class="subtitle">Secure Pairing Protocol</div>
+            <i class="fas fa-skull skull-icon"></i>
+            <div class="logo">MOMO-XMD</div>
+            <div class="subtitle">Blue Dark Web Edition</div>
 
             <div class="tabs">
-                <div class="tab active" id="tab-pairing" onclick="setMode('pairing')">Pairing Code</div>
-                <div class="tab" id="tab-qr" onclick="setMode('qr')">QR Scanner</div>
+                <div class="tab active" id="tab-pairing" onclick="setMode('pairing')">Pairing</div>
+                <div class="tab" id="tab-qr" onclick="setMode('qr')">QR Code</div>
             </div>
 
             <div id="pairing-section">
@@ -316,48 +332,55 @@
                     <input type="text" id="number" placeholder="+255..." autocomplete="off">
                 </div>
                 <div class="form-group">
-                    <label>Optional: Proxy Node (http://ip:port)</label>
-                    <input type="text" id="proxy" placeholder="Leave empty for direct" autocomplete="off">
+                    <label>Proxy Node (Optional)</label>
+                    <input type="text" id="proxy" placeholder="http://ip:port" autocomplete="off">
                 </div>
-                <button id="btn-submit" onclick="submit()">Initialize Pairing</button>
+                <button id="btn-submit" onclick="submit()">Initialize Link</button>
             </div>
 
             <div id="qr-section" style="display: none;">
-                <p style="font-size: 0.8rem; text-align: center; margin-bottom: 20px;">GENERATE TEMPORARY QR TOKEN FOR AUTHENTICATION</p>
-                <button id="btn-qr" onclick="getQR()">Generate QR Code</button>
+                <p style="font-size: 0.8rem; margin-bottom: 20px;">GENERATE BLUE TOKEN FOR AUTHENTICATION</p>
+                <button id="btn-qr" onclick="getQR()">Generate QR</button>
             </div>
 
             <div class="loader" id="loader">
-                <i class="fas fa-skull-crossbones"></i>
-                <p>ACCESSING WHATSAPP MAINFRAME...</p>
+                <i class="fas fa-ghost"></i>
+                <p>BYPASSING FIREWALLS...</p>
             </div>
 
             <div id="result">
                 <div id="pairing-display" style="display: none;">
-                    <p>INCOMING PAIRING CODE:</p>
-                    <div class="pairing-code-container">
-                        <div id="pairing-code" onclick="copyCode()"></div>
-                        <div class="copy-hint">CLICK CODE TO COPY</div>
-                    </div>
-                    <div class="status-msg" id="status-msg">WAITING FOR DEVICE LINK...</div>
+                    <p>PAIRING CODE GENERATED:</p>
+                    <div id="pairing-code" onclick="copyCode()"></div>
+                    <div class="copy-hint">CLICK TO COPY CODE</div>
+                    <div class="status-msg" id="status-msg">WAITING FOR WHATSAPP...</div>
                 </div>
                 
                 <div id="qr-display" style="display: none;">
                     <img id="qr-image" src="" alt="QR CODE">
-                    <p class="status-msg">SCAN WITHIN 40 SECONDS</p>
+                    <p class="status-msg">SCAN TO AUTHORIZE</p>
                 </div>
             </div>
         </div>
 
         <div class="footer">
-            SYSTEM DESIGN BY <span class="owner">MOMO47</span> &copy; 2026<br>
-            ENCRYPTED CONNECTION ESTABLISHED
+            DESIGNED BY <span class="owner">MOMO47</span> &copy; 2026<br>
+            STAY ANONYMOUS. STAY SECURE.
         </div>
     </div>
 
     <script>
         let mode = 'pairing';
         let pollInterval = null;
+
+        // Lightning effect
+        setInterval(() => {
+            if (Math.random() > 0.95) {
+                const l = document.getElementById('lightning');
+                l.classList.add('strike-anim');
+                setTimeout(() => l.classList.remove('strike-anim'), 500);
+            }
+        }, 2000);
 
         function setMode(m) {
             mode = m;
@@ -373,7 +396,7 @@
             const n = document.getElementById('notification');
             n.innerText = text;
             n.style.display = 'block';
-            setTimeout(() => n.style.display = 'none', 3000);
+            setTimeout(() => n.style.display = 'none', 2000);
         }
 
         async function submit() {
@@ -399,10 +422,10 @@
                         startPolling(data.sessionKey);
                     }
                 } else {
-                    showNotification(data.message || 'FAILED TO INITIALIZE');
+                    showNotification(data.message || 'LINK FAILED');
                 }
             } catch (e) { 
-                showNotification('SERVER CONNECTION ERROR'); 
+                showNotification('SERVER ERROR'); 
             } finally { 
                 toggleLoading(false); 
             }
@@ -419,10 +442,10 @@
                     document.getElementById('pairing-display').style.display = 'none';
                     document.getElementById('result').style.display = 'block';
                 } else {
-                    showNotification(data.error || 'QR GENERATION FAILED');
+                    showNotification(data.error || 'QR FAILED');
                 }
             } catch (e) { 
-                showNotification('SERVER CONNECTION ERROR'); 
+                showNotification('SERVER ERROR'); 
             } finally { 
                 toggleLoading(false); 
             }
@@ -450,13 +473,13 @@
                     const msgEl = document.getElementById('status-msg');
                     
                     if (data.status === 'open' || data.status === 'connected') {
-                        msgEl.innerHTML = '<span style="color:#00ff00">LINK SUCCESSFUL! SESSION SENT TO WHATSAPP.</span>';
+                        msgEl.innerHTML = '<span style="color:#fff; text-shadow: 0 0 10px #00ff00;">LINK SUCCESSFUL! SESSION SENT.</span>';
                         stopPolling();
                     } else if (data.status === 'close') {
-                        msgEl.innerHTML = '<span style="color:#ff0000">CONNECTION CLOSED. RETRY.</span>';
+                        msgEl.innerHTML = '<span style="color:#ff0000">LINK CLOSED. RETRY.</span>';
                         stopPolling();
                     } else {
-                        msgEl.innerText = 'WAITING FOR DEVICE LINK... (' + data.status + ')';
+                        msgEl.innerText = 'WAITING FOR WHATSAPP... (' + data.status.toUpperCase() + ')';
                     }
                 } catch (e) {}
             }, 3000);

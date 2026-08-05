@@ -25,14 +25,12 @@ const msgRetryCounterCache = new NodeCache();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session Status Endpoint
 app.get('/session-status/:key', (req, res) => {
     const session = sessions.get(req.params.key);
     if (!session) return res.json({ status: 'waiting' });
     res.json(session);
 });
 
-// Pairing Endpoint
 app.post('/pair', async (req, res) => {
     const { number, proxy } = req.body;
     if (!number) return res.status(400).json({ message: 'Number required' });
@@ -68,7 +66,8 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["Ubuntu", "Chrome", "20.0.04"],
+            // Using a more standard browser identity
+            browser: Browsers.ubuntu('Chrome'),
             agent,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -80,24 +79,30 @@ app.post('/pair', async (req, res) => {
         sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect } = update;
+            const { connection, lastDisconnect, qr } = update;
             
             if (connection) {
                 sessions.set(sessionKey, { status: connection });
-                console.log(`[CONN] ${cleanNumber}: ${connection}`);
+                console.log(`[CONN UPDATE] ${cleanNumber}: ${connection}`);
+            }
+
+            if (lastDisconnect) {
+                const reason = lastDisconnect?.error?.output?.statusCode;
+                console.log(`[DISCONNECT] ${cleanNumber}: Reason ${reason}`);
             }
 
             if (connection === 'connecting' && !isResolved) {
-                // Wait a bit to ensure socket is ready for pairing request
                 await delay(5000);
                 try {
+                    console.log(`[REQUESTING CODE] ${cleanNumber}`);
                     const code = await sock.requestPairingCode(cleanNumber);
                     if (code && !isResolved) {
                         isResolved = true;
+                        console.log(`[CODE GENERATED] ${cleanNumber}: ${code}`);
                         res.json({ code, sessionKey });
                     }
                 } catch (err) {
-                    console.error(`[CODE ERR] ${err.message}`);
+                    console.error(`[CODE ERR] ${cleanNumber}: ${err.message}`);
                     if (!isResolved) {
                         isResolved = true;
                         res.status(500).json({ message: `WhatsApp rejected: ${err.message}` });
@@ -106,44 +111,42 @@ app.post('/pair', async (req, res) => {
             }
 
             if (connection === 'open') {
-                console.log(`[OPEN] ${cleanNumber} Linked!`);
+                console.log(`[CONNECTED] ${cleanNumber} Successfully Linked!`);
                 await delay(5000);
-                const sessionID = `MOMO-XMD~${Buffer.from(JSON.stringify(state.creds)).toString('base64')}`;
+                
+                // User requested standard session ID (without prefix if possible, but let's make it clean)
+                // Standard for many bots is just the base64 of creds.json
+                const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
                 
                 try {
                     await sock.sendMessage(sock.user.id, { 
-                        text: `*✅ MOMO-XMD CONNECTED*\n\n*SESSION ID:*\n${sessionID}\n\n_Keep this ID safe!_` 
+                        text: `*✅ MOMO-XMD CONNECTED*\n\n*SESSION ID:*\n\n${sessionID}\n\n_Use this ID in your config._` 
                     });
-                } catch (e) {}
+                    console.log(`[MSG SENT] Session ID sent to ${sock.user.id}`);
+                } catch (e) {
+                    console.error(`[MSG ERR] Failed to send session ID: ${e.message}`);
+                }
 
                 sessions.set(sessionKey, { status: 'connected', sessionId: sessionID });
                 
-                // Cleanup after success
                 setTimeout(() => {
                     sock.end();
                     if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
                 }, 10000);
             }
-
-            if (connection === 'close') {
-                const reason = lastDisconnect?.error?.output?.statusCode;
-                if (reason === DisconnectReason.loggedOut) {
-                    if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                }
-            }
         });
 
-        // Timeout if no response
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
+                console.log(`[TIMEOUT] Pairing request for ${cleanNumber} timed out.`);
                 res.status(500).json({ message: 'Pairing Timeout' });
                 sock.end();
             }
-        }, 45000);
+        }, 60000);
 
     } catch (err) {
-        console.error(`[FATAL] ${err.message}`);
+        console.error(`[FATAL ERR] ${err.message}`);
         if (!isResolved) {
             isResolved = true;
             res.status(500).json({ message: err.message });
@@ -153,7 +156,6 @@ app.post('/pair', async (req, res) => {
     }
 });
 
-// QR Endpoint
 app.get('/qr', async (req, res) => {
     const authDir = path.join(__dirname, `qr_${Date.now()}`);
     let sent = false;
@@ -164,7 +166,7 @@ app.get('/qr', async (req, res) => {
             auth: state,
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["Ubuntu", "Chrome", "20.0.04"]
+            browser: Browsers.ubuntu('Chrome')
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -179,8 +181,8 @@ app.get('/qr', async (req, res) => {
             }
 
             if (connection === 'open') {
-                const sessionID = `MOMO-XMD~${Buffer.from(JSON.stringify(state.creds)).toString('base64')}`;
-                await sock.sendMessage(sock.user.id, { text: `*✅ MOMO-XMD QR CONNECTED*\n\n*SESSION ID:*\n${sessionID}` });
+                const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
+                await sock.sendMessage(sock.user.id, { text: `*✅ MOMO-XMD QR CONNECTED*\n\n*SESSION ID:*\n\n${sessionID}` });
                 setTimeout(() => {
                     sock.end();
                     if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
@@ -200,4 +202,4 @@ app.get('/qr', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`MOMO-XMD DARK WEB SERVER RUNNING ON PORT ${PORT}`));
+app.listen(PORT, () => console.log(`MOMO-XMD SERVER RUNNING ON PORT ${PORT}`));
