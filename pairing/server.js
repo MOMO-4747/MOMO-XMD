@@ -39,7 +39,7 @@ app.post('/pair', async (req, res) => {
     const sessionKey = `momo_${Date.now()}`;
     const authDir = path.join(__dirname, `auth_${Date.now()}`);
     
-    console.log(`[PAIR] Request: ${cleanNumber}`);
+    console.log(`[PAIR] Request: ${cleanNumber} | Proxy: ${proxy || 'None'}`);
     sessions.set(sessionKey, { status: 'initializing' });
 
     const release = await mutex.acquire();
@@ -51,7 +51,12 @@ app.post('/pair', async (req, res) => {
 
         let agent = null;
         if (proxy) {
-            try { agent = new HttpsProxyAgent(proxy); } catch (e) { console.error(`[PROXY ERR] ${e.message}`); }
+            try {
+                agent = new HttpsProxyAgent(proxy);
+                console.log(`[PROXY] Using agent for ${cleanNumber}`);
+            } catch (e) {
+                console.error(`[PROXY ERR] ${e.message}`);
+            }
         }
 
         const sock = makeWASocket({
@@ -62,8 +67,8 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            // Using a more robust browser identity
-            browser: ["Ubuntu", "Chrome", "20.0.04"],
+            // Using a more modern browser string
+            browser: ["Ubuntu", "Chrome", "114.0.5735.199"],
             agent,
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
@@ -85,7 +90,7 @@ app.post('/pair', async (req, res) => {
             }
 
             if (connection === 'connecting' && !isResolved) {
-                // Wait longer (10 seconds) to ensure socket is stable
+                // Wait for 10 seconds to ensure the socket is fully ready for pairing
                 await delay(10000); 
                 try {
                     console.log(`[REQUESTING CODE] ${cleanNumber}`);
@@ -96,7 +101,7 @@ app.post('/pair', async (req, res) => {
                         console.log(`[CODE GENERATED] ${cleanNumber}: ${code}`);
                     }
                 } catch (err) {
-                    console.error(`[CODE ERR] ${err.message}`);
+                    console.error(`[CODE ERR] ${cleanNumber}: ${err.message}`);
                     if (!isResolved) {
                         isResolved = true;
                         res.status(500).json({ message: `WhatsApp rejected: ${err.message}` });
@@ -107,32 +112,56 @@ app.post('/pair', async (req, res) => {
             if (connection === 'open') {
                 console.log(`[SUCCESS] ${cleanNumber} Connected!`);
                 await delay(5000);
+                
+                // Standard Base64 session ID
                 const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
+                
                 try {
-                    await sock.sendMessage(sock.user.id, { text: `*✅ MOMO-XMD CONNECTED*\n\n*SESSION ID:*\n\n${sessionID}` });
-                } catch (e) {}
+                    await sock.sendMessage(sock.user.id, { 
+                        text: `*✅ MOMO-XMD CONNECTED*\n\n*SESSION ID:*\n\n${sessionID}\n\n_Use this ID in your bot configuration._` 
+                    });
+                } catch (e) {
+                    console.error(`[MSG ERR] ${e.message}`);
+                }
+
                 sessions.set(sessionKey, { status: 'connected', sessionId: sessionID });
+                
+                // Keep connection alive for 30 seconds after success then cleanup
                 setTimeout(() => {
                     sock.end();
-                    if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                }, 15000);
+                    if (fs.existsSync(authDir)) {
+                        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
+                    }
+                }, 30000);
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
+                console.log(`[DISCONNECT] ${cleanNumber}: Reason ${reason}`);
+                
                 if (reason === DisconnectReason.loggedOut) {
-                    if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
+                    if (fs.existsSync(authDir)) {
+                        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
+                    }
                 }
             }
         });
 
+        // Increase timeout to 5 minutes to give user enough time to link
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
                 res.status(500).json({ message: 'Pairing Timeout' });
                 sock.end();
             }
-        }, 60000);
+            // End socket after 5 minutes regardless to free resources
+            setTimeout(() => {
+                try { sock.end(); } catch (e) {}
+                if (fs.existsSync(authDir)) {
+                    try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
+                }
+            }, 300000);
+        }, 300000);
 
     } catch (err) {
         console.error(`[FATAL] ${err.message}`);
@@ -154,7 +183,7 @@ app.get('/qr', async (req, res) => {
             auth: state,
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["Ubuntu", "Chrome", "20.0.04"]
+            browser: ["Ubuntu", "Chrome", "114.0.5735.199"]
         });
         sock.ev.on('creds.update', saveCreds);
         sock.ev.on('connection.update', async (update) => {
@@ -177,4 +206,4 @@ app.get('/qr', async (req, res) => {
     } catch (e) { if (!sent) res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`MOMO-XMD SERVER RUNNING ON PORT ${PORT}`));
+app.listen(PORT, () => console.log(`MOMO-XMD FINAL SERVER RUNNING ON PORT ${PORT}`));
