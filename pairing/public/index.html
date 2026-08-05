@@ -62,35 +62,15 @@
             color: #00ff64;
             margin-bottom: 25px;
         }
-        .tab-buttons {
-            display: flex;
-            margin-bottom: 25px;
-            border-bottom: 1px solid #00f2fe30;
-        }
-        .tab-button {
-            flex: 1;
-            padding: 12px 0;
-            background: transparent;
-            border: none;
-            color: #00f2fe80;
-            font-size: 1em;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-family: 'Orbitron', sans-serif;
-        }
-        .tab-button.active {
-            color: #00f2fe;
-            border-bottom: 3px solid #00f2fe;
-            text-shadow: 0 0 10px #00f2fe;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
         .input-group {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.8em;
+            color: #00f2fe;
+            text-align: left;
         }
         input[type="text"] {
             width: 100%;
@@ -104,7 +84,7 @@
             text-align: center;
         }
         input[type="text"]::placeholder {
-            color: #00f2fe50;
+            color: #00f2fe30;
         }
         button {
             width: 100%;
@@ -118,6 +98,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             font-family: 'Orbitron', sans-serif;
+            margin-top: 10px;
         }
         button:hover {
             box-shadow: 0 0 20px #00ff64;
@@ -157,6 +138,12 @@
             color: #00f2fe80;
         }
         .footer a { color: #00ff64; text-decoration: none; }
+        .proxy-info {
+            font-size: 0.7em;
+            color: #ff3e3e;
+            margin-top: 5px;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -169,27 +156,20 @@
             <p>Link your WhatsApp securely.</p>
         </div>
 
-        <div class="tab-buttons">
-            <button class="tab-button active" onclick="openTab(event, 'pairing-code')">CODE</button>
-            <button class="tab-button" onclick="openTab(event, 'qr-code')">QR</button>
-        </div>
-
-        <div id="pairing-code" class="tab-content active">
+        <div id="pairing-code">
             <div class="input-group">
+                <label>Phone Number (with country code)</label>
                 <input type="text" id="phone-number" placeholder="255760298574">
+            </div>
+            <div class="input-group">
+                <label>Proxy URL (Optional - if VPS IP is blocked)</label>
+                <input type="text" id="proxy-url" placeholder="http://user:pass@host:port">
+                <p class="proxy-info">Use a proxy if it hangs after entering the code.</p>
             </div>
             <button onclick="generatePairingCode()" id="pair-btn">GENERATE CODE</button>
             <div id="pair-code-display"></div>
             <div id="session-id-display"></div>
             <div id="pairing-status" class="status-message"></div>
-        </div>
-
-        <div id="qr-code" class="tab-content">
-            <div style="text-align: center;">
-                <img id="qr-image" style="width: 200px; height: 200px; display: none; margin: 0 auto;" src="" alt="QR">
-                <p id="qr-status">Click below to generate QR.</p>
-                <button onclick="generateQRCode()" id="qr-btn">GENERATE QR</button>
-            </div>
         </div>
 
         <div class="footer">
@@ -200,17 +180,9 @@
     <script>
         let sessionCheckInterval;
 
-        function openTab(evt, tabName) {
-            const contents = document.getElementsByClassName("tab-content");
-            for (let content of contents) content.style.display = "none";
-            const tabs = document.getElementsByClassName("tab-button");
-            for (let tab of tabs) tab.classList.remove("active");
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.classList.add("active");
-        }
-
         async function generatePairingCode() {
             const number = document.getElementById('phone-number').value;
+            const proxy = document.getElementById('proxy-url').value;
             if (!number) return alert('Enter number!');
             
             const btn = document.getElementById('pair-btn');
@@ -227,7 +199,7 @@
                 const res = await fetch('/pair', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number })
+                    body: JSON.stringify({ number, proxy })
                 });
                 const data = await res.json();
 
@@ -259,34 +231,11 @@
                         status.textContent = '✅ Connected! Session ID below:';
                         sessionBox.textContent = data.sessionId;
                         sessionBox.style.display = 'block';
+                    } else if (data.status === 'close' || data.status === 'error') {
+                        // Don't clear yet, might be temporary
                     }
                 } catch (e) {}
             }, 3000);
-        }
-
-        async function generateQRCode() {
-            const img = document.getElementById('qr-image');
-            const status = document.getElementById('qr-status');
-            const btn = document.getElementById('qr-btn');
-
-            btn.disabled = true;
-            status.textContent = 'Generating...';
-
-            try {
-                const res = await fetch('/qr');
-                const data = await res.json();
-                if (data.success) {
-                    img.src = data.qr;
-                    img.style.display = 'block';
-                    status.textContent = 'Scan QR in WhatsApp.';
-                    startMonitoring(data.sessionKey);
-                } else {
-                    status.textContent = 'Error generating QR.';
-                }
-            } catch (e) {
-                status.textContent = 'Server error.';
-            }
-            btn.disabled = false;
         }
     </script>
 </body>
