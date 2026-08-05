@@ -51,7 +51,7 @@ app.post('/pair', async (req, res) => {
 
     let authDir = path.join(__dirname, 'auth_' + Date.now())
     let isResolved = false
-    let sock = null
+    let codeSent = false
 
     try {
         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
@@ -60,7 +60,7 @@ app.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
-        sock = makeWASocket({
+        const sock = makeWASocket({
             version,
             auth: {
                 creds: state.creds,
@@ -68,7 +68,7 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            // Official browser setting as suggested
+            // Using Browsers.ubuntu("Chrome") as suggested
             browser: Browsers.ubuntu("Chrome"), 
             markOnlineOnConnect: true,
             msgRetryCounterCache,
@@ -88,8 +88,32 @@ app.post('/pair', async (req, res) => {
                 sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection })
             }
 
+            // Logic to request pairing code when connecting
+            if (connection === 'connecting' && !codeSent) {
+                codeSent = true
+                try {
+                    console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
+                    // Wait a bit to ensure socket is ready
+                    await new Promise(r => setTimeout(r, 3000))
+                    let code = await sock.requestPairingCode(cleanNumber)
+                    if (code && !isResolved) {
+                        isResolved = true
+                        console.log(`[SOCKET] Code: ${code}`)
+                        res.json({ success: true, code: code, sessionKey })
+                    }
+                } catch (err) {
+                    console.log(`[SOCKET] Error requesting code: ${err.message}`)
+                    if (!isResolved) {
+                        isResolved = true
+                        res.status(500).json({ success: false, message: `WhatsApp rejected request: ${err.message}` })
+                    }
+                }
+            }
+
             if (connection === 'open') {
                 console.log(`[SUCCESS] ${cleanNumber} CONNECTED!`)
+                
+                // IMPORTANT: Wait for sync and save creds properly
                 await new Promise(r => setTimeout(r, 5000))
                 await saveCreds()
                 
@@ -104,15 +128,19 @@ app.post('/pair', async (req, res) => {
                         await sock.sendMessage(userId, { 
                             text: `*✅ MOMO-XMD Connected!*\n\n*Session ID:*\n\n${sessionId}\n\n_Copy this ID and use it in your bot configuration._` 
                         })
+                        console.log(`[MESSAGE] Session ID sent to ${userId}`)
                     } catch (e) {
-                        console.log(`[ERR] ${e.message}`)
+                        console.log(`[ERR] Failed to send message: ${e.message}`)
                     }
                 }
 
-                // Wait a bit more before cleaning up to ensure message is sent
+                // ONLY end socket and delete auth folder AFTER successful connection and message sending
                 setTimeout(() => {
                     try { sock.end(undefined) } catch (e) {}
-                    if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true })
+                    if (fs.existsSync(authDir)) {
+                        console.log(`[CLEANUP] Deleting auth folder: ${authDir}`)
+                        fs.rmSync(authDir, { recursive: true, force: true })
+                    }
                 }, 15000)
             }
 
@@ -120,43 +148,18 @@ app.post('/pair', async (req, res) => {
                 const reason = lastDisconnect?.error?.output?.statusCode
                 console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`)
                 
-                // Only resolve error if we haven't gotten a code yet
-                if (!isResolved && reason !== DisconnectReason.loggedOut) {
-                    // We don't resolve here to allow retries or timeout to handle it
+                // If closed before we got a code or if it failed to open
+                if (!isResolved && connection !== 'open') {
+                    // Timeout will handle it if it doesn't resolve
                 }
             }
         })
 
-        // Request pairing code only when connecting or starting
-        let codeSent = false
-        const getCode = async () => {
-            if (codeSent || isResolved) return
-            codeSent = true
-            try {
-                console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
-                let code = await sock.requestPairingCode(cleanNumber)
-                if (code && !isResolved) {
-                    isResolved = true
-                    console.log(`[SOCKET] Code: ${code}`)
-                    res.json({ success: true, code: code, sessionKey })
-                }
-            } catch (err) {
-                console.log(`[SOCKET] Error: ${err.message}`)
-                if (!isResolved) {
-                    isResolved = true
-                    res.status(500).json({ success: false, message: `WhatsApp rejected request: ${err.message}` })
-                }
-            }
-        }
-
-        // Give it a small delay to ensure socket is ready to request code
-        setTimeout(getCode, 3000)
-
-        // Global timeout for the HTTP request
+        // Global timeout for the HTTP request to avoid hanging
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true
-                res.status(500).json({ success: false, message: 'Timeout.' })
+                res.status(500).json({ success: false, message: 'Request timed out.' })
             }
         }, 45000)
 
