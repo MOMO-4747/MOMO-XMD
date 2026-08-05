@@ -57,9 +57,7 @@ app.post('/pair', async (req, res) => {
         fs.mkdirSync(authDir, { recursive: true })
 
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
-        
-        // Use a stable version instead of fetching latest every time
-        const version = [2, 3000, 1015901307] 
+        const { version } = await fetchLatestBaileysVersion()
 
         const sock = makeWASocket({
             version,
@@ -118,15 +116,19 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
-                console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`)
+                const message = lastDisconnect?.error?.message
+                console.log(`[SOCKET] ${cleanNumber} closed: ${reason} (${message})`)
+                if (reason === DisconnectReason.loggedOut) {
+                    sessions.set(sessionKey, { status: 'error', error: 'Logged out.' })
+                }
             }
         })
 
-        // Request pairing code with retry logic
-        const getCode = async (retryCount = 0) => {
+        // Request pairing code after 3 seconds
+        setTimeout(async () => {
             try {
                 if (isResolved) return
-                console.log(`[SOCKET] Fetching code for ${cleanNumber} (Attempt ${retryCount + 1})...`)
+                console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
                 let code = await sock.requestPairingCode(cleanNumber)
                 if (code && !isResolved) {
                     isResolved = true
@@ -134,19 +136,13 @@ app.post('/pair', async (req, res) => {
                     res.json({ success: true, code: code, sessionKey })
                 }
             } catch (err) {
-                console.log(`[SOCKET] Error on attempt ${retryCount + 1}: ${err.message}`)
-                if (retryCount < 2 && !isResolved) {
-                    await new Promise(r => setTimeout(r, 3000))
-                    return getCode(retryCount + 1)
-                }
+                console.log(`[SOCKET] Error: ${err.message}`)
                 if (!isResolved) {
                     isResolved = true
                     res.status(500).json({ success: false, message: `WhatsApp rejected request: ${err.message}` })
                 }
             }
-        }
-
-        setTimeout(() => getCode(), 3000)
+        }, 3000)
 
         setTimeout(() => {
             if (!isResolved) {
