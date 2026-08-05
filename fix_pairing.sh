@@ -1,3 +1,19 @@
+#!/bin/bash
+set -e
+
+echo "Starting MOMO-XMD Pairing Fix..."
+
+# 1. Install dependencies
+cd /root/MOMO-XMD/pairing
+npm install https-proxy-agent socks-proxy-agent
+
+# 2. Backup old server.js
+if [ -f server.js ]; then
+    cp server.js server.js.bak
+fi
+
+# 3. Upload new server.js (I will use cat to write it)
+cat << 'EOF' > server.js
 const express = require('express')
 const path = require('path')
 const {
@@ -13,10 +29,9 @@ const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
 const { HttpsProxyAgent } = require('https-proxy-agent')
-const { SocksProxyAgent } = require('socks-proxy-agent')
 
 const app = express()
-const PORT = process.env.PORT || 8000
+const PORT = process.env.PORT || 3000
 const PROXY_URL = process.env.PROXY_URL || null
 
 const msgRetryCounterCache = new NodeCache()
@@ -67,11 +82,7 @@ app.post('/pair', async (req, res) => {
         const activeProxy = proxy || PROXY_URL
         if (activeProxy) {
             console.log(`[PROXY] Using proxy: ${activeProxy}`)
-            if (activeProxy.startsWith('socks')) {
-                agent = new SocksProxyAgent(activeProxy)
-            } else {
-                agent = new HttpsProxyAgent(activeProxy)
-            }
+            agent = new HttpsProxyAgent(activeProxy)
         }
 
         const sock = makeWASocket({
@@ -82,10 +93,10 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: Browsers.macOS("Desktop"), 
+            browser: ["Ubuntu", "Chrome", "20.0.04"], 
             markOnlineOnConnect: true,
             msgRetryCounterCache,
-            connectTimeoutMs: 120000,
+            connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 10000,
             shouldSyncHistoryMessage: () => false,
@@ -106,7 +117,7 @@ app.post('/pair', async (req, res) => {
                 codeSent = true
                 try {
                     console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
-                    await new Promise(r => setTimeout(r, 10000)) // 10s delay to ensure stability
+                    await new Promise(r => setTimeout(r, 6000))
                     let code = await sock.requestPairingCode(cleanNumber)
                     if (code && !isResolved) {
                         isResolved = true
@@ -138,9 +149,7 @@ app.post('/pair', async (req, res) => {
                         await sock.sendMessage(userId, { 
                             text: `*✅ MOMO-XMD Connected!*\n\n*Session ID:*\n\n${sessionId}\n\n_Copy this ID and use it in your bot configuration._` 
                         })
-                    } catch (e) {
-                        console.log(`[ERR] Failed to send message: ${e.message}`)
-                    }
+                    } catch (e) {}
                 }
 
                 setTimeout(() => {
@@ -154,9 +163,6 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
                 console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`)
-                if (reason === DisconnectReason.loggedOut) {
-                    sessions.set(sessionKey, { status: 'error', error: 'Logged out' })
-                }
             }
         })
 
@@ -165,13 +171,12 @@ app.post('/pair', async (req, res) => {
                 isResolved = true
                 res.status(500).json({ success: false, message: 'Request timed out.' })
             }
-        }, 90000)
+        }, 60000)
 
     } catch (error) {
         console.log(`[FATAL] ${error.message}`)
         if (!isResolved) {
             isResolved = true
-            sessions.set(sessionKey, { status: 'error', error: error.message })
             if (!res.headersSent) res.status(500).json({ success: false, message: error.message })
         }
     } finally {
@@ -180,3 +185,9 @@ app.post('/pair', async (req, res) => {
 })
 
 app.listen(PORT, () => console.log(`Server started on port ${PORT}`))
+EOF
+
+# 4. Restart with PM2
+pm2 restart MOMO-XMD-PAIRING || pm2 start server.js --name MOMO-XMD-PAIRING
+
+echo "Fix applied successfully!"

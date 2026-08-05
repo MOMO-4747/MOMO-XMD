@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOMO-XMD Cyber Pairing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0e1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Rajdhani', sans-serif;
+            padding: 20px;
+            color: #00f2fe;
+            overflow-x: hidden;
+        }
+        .container {
+            width: 100%;
+            max-width: 450px;
+            background: rgba(10, 14, 26, 0.9);
+            border: 1px solid #00f2fe30;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 0 50px #00f2fe20, inset 0 0 20px #00f2fe10;
+            backdrop-filter: blur(10px);
+            position: relative;
+            z-index: 1;
+        }
+        .logo-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            width: 150px; height: 150px; border-radius: 50%;
+            margin: 0 auto 20px;
+            position: relative;
+            display: flex; justify-content: center; align-items: center;
+            background: linear-gradient(45deg, #00f2fe, #00ff64);
+            padding: 5px;
+            box-shadow: 0 0 30px #00f2fe, 0 0 60px #00ff64;
+        }
+        .logo img {
+            width: 100%; height: 100%; border-radius: 50%;
+            object-fit: cover;
+            background: #0a0e1a;
+            padding: 5px;
+        }
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8em;
+            color: #00f2fe;
+            text-shadow: 0 0 15px #00f2fe;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+        p {
+            font-size: 1em;
+            color: #00ff64;
+            margin-bottom: 25px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.8em;
+            color: #00f2fe;
+            text-align: left;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #00f2fe50;
+            background: #0a0e1a;
+            color: #00ff64;
+            border-radius: 8px;
+            font-size: 1em;
+            outline: none;
+            text-align: center;
+        }
+        input[type="text"]::placeholder {
+            color: #00f2fe30;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, #00f2fe, #00ff64);
+            border: none;
+            border-radius: 8px;
+            color: #0a0e1a;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Orbitron', sans-serif;
+            margin-top: 10px;
+        }
+        button:hover {
+            box-shadow: 0 0 20px #00ff64;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #pair-code-display, #session-id-display {
+            background: #1a1a2e;
+            border: 1px dashed #00f2fe;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Orbitron', monospace;
+            font-size: 1.2em;
+            color: #00ff64;
+            word-break: break-all;
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+        #session-id-display {
+            font-size: 0.8em;
+            color: #00f2fe;
+            border-style: solid;
+        }
+        .status-message {
+            margin-top: 20px;
+            font-size: 1em;
+            color: #00f2fe;
+            text-align: center;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 0.8em;
+            color: #00f2fe80;
+        }
+        .footer a { color: #00ff64; text-decoration: none; }
+        .proxy-info {
+            font-size: 0.7em;
+            color: #ff3e3e;
+            margin-top: 5px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-section">
+            <div class="logo">
+                <img src="https://raw.githubusercontent.com/MOMO-4747/MOMO-XMD/main/media/momo_hacker_logo.png" alt="MOMO-XMD Logo">
+            </div>
+            <h1>MOMO-XMD PAIRING</h1>
+            <p>Link your WhatsApp securely.</p>
+        </div>
+
+        <div id="pairing-code">
+            <div class="input-group">
+                <label>Phone Number (with country code)</label>
+                <input type="text" id="phone-number" placeholder="255760298574">
+            </div>
+            <div class="input-group">
+                <label>Proxy URL (Optional - if VPS IP is blocked)</label>
+                <input type="text" id="proxy-url" placeholder="http://user:pass@host:port">
+                <p class="proxy-info">Use a proxy if it hangs after entering the code.</p>
+            </div>
+            <button onclick="generatePairingCode()" id="pair-btn">GENERATE CODE</button>
+            <div id="pair-code-display"></div>
+            <div id="session-id-display"></div>
+            <div id="pairing-status" class="status-message"></div>
+        </div>
+
+        <div class="footer">
+            Built by <a href="https://github.com/MOMO-4747">MOMO47</a>
+        </div>
+    </div>
+
+    <script>
+        let sessionCheckInterval;
+
+        async function generatePairingCode() {
+            const number = document.getElementById('phone-number').value;
+            const proxy = document.getElementById('proxy-url').value;
+            if (!number) return alert('Enter number!');
+            
+            const btn = document.getElementById('pair-btn');
+            const status = document.getElementById('pairing-status');
+            const codeBox = document.getElementById('pair-code-display');
+            const sessionBox = document.getElementById('session-id-display');
+
+            btn.disabled = true;
+            status.textContent = 'Generating...';
+            codeBox.style.display = 'none';
+            sessionBox.style.display = 'none';
+
+            try {
+                const res = await fetch('/pair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ number, proxy })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    codeBox.textContent = data.code;
+                    codeBox.style.display = 'block';
+                    status.textContent = 'Enter this code in WhatsApp.';
+                    startMonitoring(data.sessionKey);
+                } else {
+                    status.textContent = 'Error: ' + data.message;
+                }
+            } catch (e) {
+                status.textContent = 'Server error.';
+            }
+            btn.disabled = false;
+        }
+
+        function startMonitoring(key) {
+            if (sessionCheckInterval) clearInterval(sessionCheckInterval);
+            const status = document.getElementById('pairing-status');
+            const sessionBox = document.getElementById('session-id-display');
+
+            sessionCheckInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/session-status/' + key);
+                    const data = await res.json();
+                    if (data.success && data.sessionId) {
+                        clearInterval(sessionCheckInterval);
+                        status.textContent = '✅ Connected! Session ID below:';
+                        sessionBox.textContent = data.sessionId;
+                        sessionBox.style.display = 'block';
+                    } else if (data.status === 'close' || data.status === 'error') {
+                        // Don't clear yet, might be temporary
+                    }
+                } catch (e) {}
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

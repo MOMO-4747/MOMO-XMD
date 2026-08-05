@@ -13,10 +13,9 @@ const NodeCache = require('node-cache')
 const fs = require('fs')
 const { Mutex } = require('async-mutex')
 const { HttpsProxyAgent } = require('https-proxy-agent')
-const { SocksProxyAgent } = require('socks-proxy-agent')
 
 const app = express()
-const PORT = process.env.PORT || 8000
+const PORT = process.env.PORT || 3000
 const PROXY_URL = process.env.PROXY_URL || null
 
 const msgRetryCounterCache = new NodeCache()
@@ -63,15 +62,12 @@ app.post('/pair', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDir)
         const { version } = await fetchLatestBaileysVersion()
 
+        // Setup proxy agent if provided or in env
         let agent = null
         const activeProxy = proxy || PROXY_URL
         if (activeProxy) {
             console.log(`[PROXY] Using proxy: ${activeProxy}`)
-            if (activeProxy.startsWith('socks')) {
-                agent = new SocksProxyAgent(activeProxy)
-            } else {
-                agent = new HttpsProxyAgent(activeProxy)
-            }
+            agent = new HttpsProxyAgent(activeProxy)
         }
 
         const sock = makeWASocket({
@@ -82,14 +78,14 @@ app.post('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: Browsers.macOS("Desktop"), 
+            browser: ["Ubuntu", "Chrome", "20.0.04"], 
             markOnlineOnConnect: true,
             msgRetryCounterCache,
-            connectTimeoutMs: 120000,
+            connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 10000,
             shouldSyncHistoryMessage: () => false,
-            agent: agent
+            agent: agent // Add proxy agent here
         })
 
         sock.ev.on('creds.update', saveCreds)
@@ -106,7 +102,7 @@ app.post('/pair', async (req, res) => {
                 codeSent = true
                 try {
                     console.log(`[SOCKET] Requesting code for ${cleanNumber}...`)
-                    await new Promise(r => setTimeout(r, 10000)) // 10s delay to ensure stability
+                    await new Promise(r => setTimeout(r, 5000)) // Increased delay
                     let code = await sock.requestPairingCode(cleanNumber)
                     if (code && !isResolved) {
                         isResolved = true
@@ -154,8 +150,8 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode
                 console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`)
-                if (reason === DisconnectReason.loggedOut) {
-                    sessions.set(sessionKey, { status: 'error', error: 'Logged out' })
+                if (reason === DisconnectReason.restartRequired) {
+                    console.log("[SOCKET] Restart required...")
                 }
             }
         })
@@ -165,7 +161,7 @@ app.post('/pair', async (req, res) => {
                 isResolved = true
                 res.status(500).json({ success: false, message: 'Request timed out.' })
             }
-        }, 90000)
+        }, 60000)
 
     } catch (error) {
         console.log(`[FATAL] ${error.message}`)
