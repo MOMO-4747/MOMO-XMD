@@ -90,12 +90,10 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                console.log(`[SOCKET] ${number} closed: ${reason}`);
-                if (reason !== DisconnectReason.loggedOut) {
-                    // If not logged out, it might be a temporary failure, but for pairing we usually just retry
-                }
-                if (fs.existsSync(authFolder) && connection === 'close') {
-                    // Don't delete yet, might be reconnecting, but for pairing it's usually one-shot
+                const message = lastDisconnect?.error?.message;
+                console.log(`[SOCKET] ${number} closed: ${reason} | Message: ${message}`);
+                if (reason === DisconnectReason.loggedOut) {
+                    if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
                 }
             }
         });
