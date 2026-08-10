@@ -12,7 +12,6 @@ const pino = require('pino');
 const path = require('path');
 const fs = require('fs');
 const QRCode = require('qrcode');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 app.use(express.json());
@@ -25,18 +24,10 @@ const sessions = new Map();
 process.on('unhandledRejection', (err) => console.error('[UNHANDLED]', err));
 process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
-async function createWASocket(authFolder, proxy = null) {
+async function createWASocket(authFolder) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
     
-    let agent = null;
-    if (proxy) {
-        try { 
-            console.log(`[PROXY] Using: ${proxy}`);
-            agent = new HttpsProxyAgent(proxy); 
-        } catch (e) { console.error("[PROXY ERR]", e.message); }
-    }
-
     const socket = makeWASocket({
         version,
         auth: {
@@ -45,12 +36,11 @@ async function createWASocket(authFolder, proxy = null) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        // Using a mobile identity which is often more reliable for pairing
-        browser: ["MOMO-XMD", "Chrome", "1.0.0"],
-        agent,
-        connectTimeoutMs: 120000, // Increased to 2 minutes
+        // Using a very standard Ubuntu Chrome identity for maximum compatibility
+        browser: Browsers.ubuntu('Chrome'),
+        connectTimeoutMs: 120000,
         defaultQueryTimeoutMs: 120000,
-        keepAliveIntervalMs: 20000,
+        keepAliveIntervalMs: 30000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -60,21 +50,21 @@ async function createWASocket(authFolder, proxy = null) {
 }
 
 app.post('/pair', async (req, res) => {
-    let { number, proxy } = req.body;
+    let { number } = req.body;
     if (!number) return res.status(400).json({ error: 'Number is required' });
     number = number.replace(/[^0-9]/g, '');
 
     const sessionKey = `momo_${Date.now()}`;
     const authFolder = path.join(__dirname, `session_${Date.now()}`);
     
-    console.log(`[PAIR] Number: ${number} | Proxy: ${proxy || 'None'}`);
+    console.log(`[PAIR] Direct Request for: ${number}`);
     sessions.set(sessionKey, { status: 'connecting' });
 
     let isResolved = false;
     let socket = null;
 
     try {
-        const result = await createWASocket(authFolder, proxy);
+        const result = await createWASocket(authFolder);
         socket = result.socket;
         const { state, saveCreds } = result;
         
@@ -89,7 +79,7 @@ app.post('/pair', async (req, res) => {
             }
 
             if (connection === 'open') {
-                console.log(`[SUCCESS] ${number} Linked!`);
+                console.log(`[LINKED] ${number} Success!`);
                 await delay(5000);
                 const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
                 const finalId = `MOMO-XMD~${sessionID}`;
@@ -111,14 +101,8 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
                 console.log(`[CLOSED] ${number} | Reason: ${reason}`);
-                
-                // Don't auto-resolve if it's just a reconnect
                 if (reason === DisconnectReason.loggedOut) {
                     if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
-                }
-                
-                if (!isResolved && reason === 408) {
-                    // Timeout happened, we might want to tell the user
                 }
             }
         });
@@ -187,4 +171,4 @@ app.get('/qr', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`MOMO-XMD Pro Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));
