@@ -21,12 +21,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 const PORT = process.env.PORT || 8000;
 const sessions = new Map();
 
-// Prevent server from crashing on unhandled errors
+// Error handling to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception thrown:', err);
+    console.error('Unhandled Rejection:', reason);
 });
 
 async function createWASocket(authFolder, proxy = null) {
@@ -46,11 +43,12 @@ async function createWASocket(authFolder, proxy = null) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        browser: ["Ubuntu", "Chrome", "20.0.04"], // Identity that worked for many
+        // Using a modern Chrome on Windows identity
+        browser: ["Windows", "Chrome", "127.0.6533.89"],
         agent,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 10000,
+        keepAliveIntervalMs: 30000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -65,10 +63,11 @@ app.post('/pair', async (req, res) => {
     number = number.replace(/[^0-9]/g, '');
 
     const sessionKey = `momo_${Date.now()}`;
-    const authFolder = path.join(__dirname, `session_${Date.now()}_${Math.floor(Math.random() * 1000)}`);
+    const authFolder = path.join(__dirname, `session_${Date.now()}`);
     
-    console.log(`[PAIR REQUEST] Number: ${number} | Folder: ${path.basename(authFolder)}`);
-    
+    console.log(`[PAIR] Request: ${number} | Folder: ${path.basename(authFolder)}`);
+    sessions.set(sessionKey, { status: 'connecting' });
+
     let isResolved = false;
     let socket = null;
 
@@ -83,12 +82,12 @@ app.post('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update;
             
             if (connection) {
-                console.log(`[CONN UPDATE] ${number} -> ${connection}`);
+                console.log(`[STATE] ${number} -> ${connection}`);
                 sessions.set(sessionKey, { status: connection });
             }
 
             if (connection === 'open') {
-                console.log(`[SUCCESS] ${number} Linked!`);
+                console.log(`[LINKED] ${number} Success!`);
                 await delay(5000);
                 const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
                 const finalId = `MOMO-XMD~${sessionID}`;
@@ -97,11 +96,10 @@ app.post('/pair', async (req, res) => {
                     await socket.sendMessage(socket.user.id, { 
                         text: `*✅ MOMO-XMD CONNECTED!*\n\n*SESSION ID:*\n\n${finalId}\n\n*OWNER: MOMO47*` 
                     });
-                } catch (e) { console.error("[MSG ERR]", e.message); }
+                } catch (e) {}
                 
                 sessions.set(sessionKey, { status: 'connected', sessionId: finalId });
                 
-                // Cleanup after sending session
                 setTimeout(() => {
                     try { socket.end(); } catch (e) {}
                     if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
@@ -110,26 +108,25 @@ app.post('/pair', async (req, res) => {
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                console.log(`[DISCONNECT] ${number} | Reason: ${reason}`);
-                
+                console.log(`[CLOSED] ${number} | Reason: ${reason}`);
                 if (reason === DisconnectReason.loggedOut) {
                     if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
                 }
+                sessions.set(sessionKey, { status: 'closed', reason });
             }
         });
 
-        // Delay before requesting code
+        // Request code after a short delay
         await delay(5000);
         try {
-            console.log(`[GETTING CODE] ${number}...`);
             const code = await socket.requestPairingCode(number);
-            console.log(`[CODE GENERATED] ${number}: ${code}`);
+            console.log(`[CODE] ${number}: ${code}`);
             if (!isResolved) {
                 isResolved = true;
                 res.json({ code, sessionKey });
             }
         } catch (err) {
-            console.error(`[CODE FAIL] ${number}: ${err.message}`);
+            console.error(`[CODE ERR] ${number}: ${err.message}`);
             if (!isResolved) {
                 isResolved = true;
                 res.status(500).json({ error: "WhatsApp Rejected: " + err.message });
@@ -137,7 +134,7 @@ app.post('/pair', async (req, res) => {
             try { socket.end(); } catch (e) {}
         }
 
-        // 5 minutes safety timeout
+        // 5 minute timeout
         setTimeout(() => {
             if (sessions.get(sessionKey)?.status !== 'connected') {
                 try { socket.end(); } catch (e) {}
@@ -146,7 +143,7 @@ app.post('/pair', async (req, res) => {
         }, 300000);
 
     } catch (err) {
-        console.error(`[FATAL ERR] ${err.message}`);
+        console.error(`[FATAL] ${err.message}`);
         if (!isResolved) {
             isResolved = true;
             res.status(500).json({ error: err.message });
@@ -182,4 +179,4 @@ app.get('/qr', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`MOMO-XMD Final Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));

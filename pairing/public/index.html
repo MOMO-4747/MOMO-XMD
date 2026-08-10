@@ -151,6 +151,9 @@
             z-index: 1000; font-weight: bold; font-size: 1.5rem;
         }
         .status-msg { font-size: 0.9rem; margin-top: 15px; color: var(--primary); font-weight: bold; }
+        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; background: #555; }
+        .status-dot.active { background: #00ff00; box-shadow: 0 0 5px #00ff00; }
+        .status-dot.error { background: #ff0000; box-shadow: 0 0 5px #ff0000; }
     </style>
 </head>
 <body>
@@ -189,7 +192,7 @@
 
             <div class="loader" id="loader">
                 <i class="fas fa-ghost"></i>
-                <p>BYPASSING FIREWALLS...</p>
+                <p id="loader-text">BYPASSING FIREWALLS...</p>
             </div>
 
             <div id="result">
@@ -207,10 +210,12 @@
                         2. Tap "Link a Device".<br>
                         3. Tap "Link with phone number instead" at the bottom.<br>
                         4. Enter the code above carefully.<br>
-                        <span style="color: #ff4444;">* If it fails, try again with a different browser or network.</span>
                     </div>
 
-                    <div class="status-msg" id="status-msg">WAITING FOR WHATSAPP...</div>
+                    <div class="status-msg">
+                        <span class="status-dot" id="status-dot"></span>
+                        <span id="status-text">WAITING FOR WHATSAPP...</span>
+                    </div>
                 </div>
                 
                 <div id="qr-display" style="display: none;">
@@ -259,7 +264,7 @@
             const num = document.getElementById('number').value;
             if (!num) return showNotification('NUMBER REQUIRED');
             
-            toggleLoading(true);
+            toggleLoading(true, 'INITIALIZING SOCKET...');
             try {
                 const res = await fetch('/pair', {
                     method: 'POST',
@@ -274,14 +279,14 @@
                     document.getElementById('result').style.display = 'block';
                     if (data.sessionKey) startPolling(data.sessionKey);
                 } else {
-                    showNotification(data.message || 'LINK FAILED');
+                    showNotification(data.error || 'LINK FAILED');
                 }
             } catch (e) { showNotification('SERVER ERROR'); }
             finally { toggleLoading(false); }
         }
 
         async function getQR() {
-            toggleLoading(true);
+            toggleLoading(true, 'GENERATING QR...');
             try {
                 const res = await fetch('/qr');
                 const data = await res.json();
@@ -295,8 +300,9 @@
             finally { toggleLoading(false); }
         }
 
-        function toggleLoading(on) {
+        function toggleLoading(on, text = 'BYPASSING FIREWALLS...') {
             document.getElementById('loader').style.display = on ? 'block' : 'none';
+            document.getElementById('loader-text').innerText = text;
             document.getElementById('btn-submit').disabled = on;
             document.getElementById('btn-qr').disabled = on;
             if (on) document.getElementById('result').style.display = 'none';
@@ -315,15 +321,20 @@
                 try {
                     const res = await fetch(`/session-status/${key}`);
                     const data = await res.json();
-                    const msgEl = document.getElementById('status-msg');
+                    const msgEl = document.getElementById('status-text');
+                    const dotEl = document.getElementById('status-dot');
+                    
                     if (data.status === 'open' || data.status === 'connected') {
                         msgEl.innerHTML = '<span style="color:#fff; text-shadow: 0 0 10px #00ff00;">LINK SUCCESSFUL! SESSION SENT.</span>';
+                        dotEl.className = 'status-dot active';
                         stopPolling();
-                    } else if (data.status === 'close') {
-                        msgEl.innerHTML = '<span style="color:#ff0000">LINK CLOSED. RETRY.</span>';
+                    } else if (data.status === 'closed' || data.status === 'close') {
+                        msgEl.innerHTML = '<span style="color:#ff0000">CONNECTION CLOSED. RETRY.</span>';
+                        dotEl.className = 'status-dot error';
                         stopPolling();
                     } else {
-                        msgEl.innerText = 'WAITING FOR WHATSAPP... (' + data.status.toUpperCase() + ')';
+                        msgEl.innerText = 'STATUS: ' + data.status.toUpperCase() + '...';
+                        dotEl.className = 'status-dot';
                     }
                 } catch (e) {}
             }, 3000);
