@@ -36,14 +36,35 @@ async function createWASocket(authFolder) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        // Using a very standard Ubuntu Chrome identity for maximum compatibility
-        browser: Browsers.ubuntu('Chrome'),
-        connectTimeoutMs: 120000,
-        defaultQueryTimeoutMs: 120000,
-        keepAliveIntervalMs: 30000,
+        // Reverting to the exact identity that worked previously
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 0,
+        keepAliveIntervalMs: 10000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
+        patchMessageBeforeSending: (message) => {
+            const requiresPatch = !!(
+                message.buttonsMessage ||
+                message.templateMessage ||
+                message.listMessage
+            );
+            if (requiresPatch) {
+                message = {
+                    viewOnceMessage: {
+                        message: {
+                            messageContextInfo: {
+                                deviceListMetadata: {},
+                                deviceListMetadataVersion: 2
+                            },
+                            ...message
+                        }
+                    }
+                };
+            }
+            return message;
+        }
     });
 
     return { socket, state, saveCreds };
@@ -108,7 +129,7 @@ app.post('/pair', async (req, res) => {
         });
 
         // Delay to ensure socket is ready
-        await delay(8000);
+        await delay(5000);
         try {
             const code = await socket.requestPairingCode(number);
             console.log(`[CODE] ${number}: ${code}`);
