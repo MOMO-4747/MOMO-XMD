@@ -182,6 +182,10 @@
                     <label>Terminal Input: WhatsApp Number</label>
                     <input type="text" id="number" placeholder="+255..." autocomplete="off">
                 </div>
+                <div class="form-group">
+                    <label>Proxy (Optional): http://user:pass@host:port</label>
+                    <input type="text" id="proxy" placeholder="http://proxy..." autocomplete="off" style="font-size: 0.8rem;">
+                </div>
                 <button id="btn-submit" onclick="submit()">Initialize Link</button>
             </div>
 
@@ -266,10 +270,11 @@
             
             toggleLoading(true, 'INITIALIZING SOCKET...');
             try {
+                const proxy = document.getElementById('proxy').value;
                 const res = await fetch('/pair', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number: num })
+                    body: JSON.stringify({ number: num, proxy: proxy })
                 });
                 const data = await res.json();
                 if (data.code) {

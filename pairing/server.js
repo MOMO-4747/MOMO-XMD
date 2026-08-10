@@ -21,10 +21,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 const PORT = process.env.PORT || 8000;
 const sessions = new Map();
 
-// Error handling to prevent crashes
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection:', reason);
-});
+// Global error handling
+process.on('unhandledRejection', (err) => console.error('[UNHANDLED]', err));
+process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
 async function createWASocket(authFolder, proxy = null) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
@@ -32,7 +31,10 @@ async function createWASocket(authFolder, proxy = null) {
     
     let agent = null;
     if (proxy) {
-        try { agent = new HttpsProxyAgent(proxy); } catch (e) { console.error("[PROXY ERR]", e.message); }
+        try { 
+            console.log(`[PROXY] Using: ${proxy}`);
+            agent = new HttpsProxyAgent(proxy); 
+        } catch (e) { console.error("[PROXY ERR]", e.message); }
     }
 
     const socket = makeWASocket({
@@ -43,12 +45,12 @@ async function createWASocket(authFolder, proxy = null) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        // Using a modern Chrome on Windows identity
-        browser: ["MOMO-XMD", "Safari", "2.0.0"],
+        // Using a mobile identity which is often more reliable for pairing
+        browser: ["MOMO-XMD", "Chrome", "1.0.0"],
         agent,
-        connectTimeoutMs: 90000,
-        defaultQueryTimeoutMs: 90000,
-        keepAliveIntervalMs: 60000,
+        connectTimeoutMs: 120000, // Increased to 2 minutes
+        defaultQueryTimeoutMs: 120000,
+        keepAliveIntervalMs: 20000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -65,7 +67,7 @@ app.post('/pair', async (req, res) => {
     const sessionKey = `momo_${Date.now()}`;
     const authFolder = path.join(__dirname, `session_${Date.now()}`);
     
-    console.log(`[PAIR] Request: ${number} | Folder: ${path.basename(authFolder)}`);
+    console.log(`[PAIR] Number: ${number} | Proxy: ${proxy || 'None'}`);
     sessions.set(sessionKey, { status: 'connecting' });
 
     let isResolved = false;
@@ -87,7 +89,7 @@ app.post('/pair', async (req, res) => {
             }
 
             if (connection === 'open') {
-                console.log(`[LINKED] ${number} Success!`);
+                console.log(`[SUCCESS] ${number} Linked!`);
                 await delay(5000);
                 const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
                 const finalId = `MOMO-XMD~${sessionID}`;
@@ -109,15 +111,20 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
                 console.log(`[CLOSED] ${number} | Reason: ${reason}`);
+                
+                // Don't auto-resolve if it's just a reconnect
                 if (reason === DisconnectReason.loggedOut) {
                     if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
                 }
-                sessions.set(sessionKey, { status: 'closed', reason });
+                
+                if (!isResolved && reason === 408) {
+                    // Timeout happened, we might want to tell the user
+                }
             }
         });
 
-        // Request code after a short delay
-        await delay(5000);
+        // Delay to ensure socket is ready
+        await delay(8000);
         try {
             const code = await socket.requestPairingCode(number);
             console.log(`[CODE] ${number}: ${code}`);
@@ -134,13 +141,14 @@ app.post('/pair', async (req, res) => {
             try { socket.end(); } catch (e) {}
         }
 
-        // 5 minute timeout
+        // Keep socket alive for 10 minutes for pairing
         setTimeout(() => {
-            if (sessions.get(sessionKey)?.status !== 'connected') {
+            const current = sessions.get(sessionKey);
+            if (current && current.status !== 'connected') {
                 try { socket.end(); } catch (e) {}
                 if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
             }
-        }, 300000);
+        }, 600000);
 
     } catch (err) {
         console.error(`[FATAL] ${err.message}`);
@@ -179,4 +187,4 @@ app.get('/qr', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`MOMO-XMD Pro Server running on port ${PORT}`));
