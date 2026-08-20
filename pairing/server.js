@@ -220,4 +220,8 @@ app.get('/qr', async (req, res) => {
     } catch (e) { if (!res.headersSent) res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));
+if (require.main === module) {
+    app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));
+}
+
+module.exports = app;
