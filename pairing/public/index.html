@@ -157,6 +157,10 @@
     </style>
 </head>
 <body>
+    <audio id="bg-audio" src="/bgm.mp3" loop></audio>
+    <div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+        <button onclick="toggleAudio()" id="audio-btn" style="padding: 10px 15px; font-size: 0.8rem; background: var(--card-bg); border: 1px solid var(--primary); border-radius: 50px; cursor: pointer; box-shadow: var(--glow);">🎵 BGM: OFF</button>
+    </div>
     <div class="lightning" id="lightning"></div>
     <div class="notification" id="notification">CODE COPIED!</div>
 
@@ -168,7 +172,7 @@
 
     <div class="container">
         <div class="card">
-            <i class="fas fa-skull skull-icon"></i>
+            <img src="/momo_xmd_blue_skull.jpg" alt="MOMO-XMD" class="skull-img" style="width: 110px; height: 110px; border-radius: 50%; border: 2px solid var(--primary); box-shadow: var(--glow); margin-bottom: 20px; object-fit: cover; animation: pulse 2s infinite;">
             <div class="logo">MOMO-XMD</div>
             <div class="subtitle">Blue Dark Web Edition</div>
 
@@ -313,6 +317,24 @@
             if (code === '--------') return;
             navigator.clipboard.writeText(code);
             showNotification('CODE COPIED!');
+        }
+
+        let audioPlaying = false;
+        function toggleAudio() {
+            const audio = document.getElementById('bg-audio');
+            const btn = document.getElementById('audio-btn');
+            if (audioPlaying) {
+                audio.pause();
+                audioPlaying = false;
+                btn.innerText = '🎵 BGM: OFF';
+            } else {
+                audio.play().then(() => {
+                    audioPlaying = true;
+                    btn.innerText = '🎵 BGM: ON';
+                }).catch(e => {
+                    showNotification('CLICK AGAIN TO PLAY AUDIO');
+                });
+            }
         }
 
         function startPolling(key) {
