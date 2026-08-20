@@ -30,45 +30,23 @@ process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
 async function createWASocket(authFolder, phone, res, sessionKey) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    const { version } = await fetchLatestBaileysVersion();
     
+    // Use stable browser identity as requested
     const socket = makeWASocket({
-        version,
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
         },
         printQRInTerminal: false,
-        logger: pino({ level: 'fatal' }),
+        logger: pino({ level: 'silent' }),
         browser: ["MOMO-XMD", "Chrome", "1.0.0"],
-        connectTimeoutMs: 120000,
+        connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 25000,
+        keepAliveIntervalMs: 10000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache,
-        shouldSyncHistoryMessage: () => false,
-        patchMessageBeforeSending: (message) => {
-            const requiresPatch = !!(
-                message.buttonsMessage ||
-                message.templateMessage ||
-                message.listMessage
-            );
-            if (requiresPatch) {
-                message = {
-                    viewOnceMessage: {
-                        message: {
-                            messageContextInfo: {
-                                deviceListMetadata: {},
-                                deviceListMetadataVersion: 2
-                            },
-                            ...message
-                        }
-                    }
-                };
-            }
-            return message;
-        }
+        shouldSyncHistoryMessage: () => false
     });
 
     let isResolved = false;
@@ -120,11 +98,11 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         }
     });
 
-    // Request pairing code after socket is given a moment to initialize
+    // Patient spinning delay (6 seconds) to ensure socket is fully open before requesting pairing code
     setTimeout(async () => {
         if (!isResolved) {
             try {
-                console.log(`[SOCKET] Requesting pairing code for ${phone} with MOMO-XMD identity...`);
+                console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
                 const code = await socket.requestPairingCode(phone);
                 console.log(`[CODE] ${phone}: ${code}`);
                 if (!isResolved) {
@@ -138,7 +116,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 }
             }
         }
-    }, 4000);
+    }, 6000);
 
     // Timeout guard (3 minutes)
     setTimeout(() => {
@@ -191,16 +169,14 @@ app.get('/qr', async (req, res) => {
     try {
         if (!fs.existsSync(authFolder)) fs.mkdirSync(authFolder, { recursive: true });
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-        const { version } = await fetchLatestBaileysVersion();
         
         const socket = makeWASocket({
-            version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
             },
             printQRInTerminal: false,
-            logger: pino({ level: 'fatal' }),
+            logger: pino({ level: 'silent' }),
             browser: ["MOMO-XMD", "Chrome", "1.0.0"]
         });
 
