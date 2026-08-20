@@ -40,7 +40,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
+        browser: ["MOMO-XMD", "Chrome", "1.0.0"],
         connectTimeoutMs: 120000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 25000,
@@ -120,11 +120,11 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         }
     });
 
-    // Request pairing code after 3 seconds to guarantee socket initialization
+    // Request pairing code after socket is given a moment to initialize
     setTimeout(async () => {
         if (!isResolved) {
             try {
-                console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
+                console.log(`[SOCKET] Requesting pairing code for ${phone} with MOMO-XMD identity...`);
                 const code = await socket.requestPairingCode(phone);
                 console.log(`[CODE] ${phone}: ${code}`);
                 if (!isResolved) {
@@ -138,9 +138,9 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 }
             }
         }
-    }, 3000);
+    }, 4000);
 
-    // Extended timeout guard (3 minutes to allow user to enter code)
+    // Timeout guard (3 minutes)
     setTimeout(() => {
         if (!isResolved) {
             isResolved = true;
@@ -201,7 +201,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["Ubuntu", "Chrome", "20.0.04"]
+            browser: ["MOMO-XMD", "Chrome", "1.0.0"]
         });
 
         let sent = false;
