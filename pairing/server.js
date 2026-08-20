@@ -40,8 +40,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        // Restoring exact historical browser identity that worked successfully
-        browser: ["MOMO-XMD", "Chrome", "1.0.0"],
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 15000,
@@ -73,7 +72,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
     });
 
     let isResolved = false;
-    let codeRequested = false;
+    let codeSent = false;
 
     socket.ev.on('creds.update', saveCreds);
 
@@ -85,31 +84,29 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
             sessions.set(sessionKey, { status: connection });
         }
 
-        // Request pairing code as soon as socket is open or connecting/ready
-        if (!codeRequested) {
-            codeRequested = true;
-            setTimeout(async () => {
-                try {
-                    console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
-                    const code = await socket.requestPairingCode(phone);
-                    console.log(`[CODE] ${phone}: ${code}`);
-                    if (!isResolved) {
-                        isResolved = true;
-                        res.json({ success: true, code, sessionKey });
-                    }
-                } catch (err) {
-                    console.error(`[CODE ERR] ${phone}: ${err.message}`);
-                    if (!isResolved) {
-                        isResolved = true;
-                        res.status(500).json({ success: false, error: "WhatsApp Rejected: " + err.message });
-                    }
+        if (connection === 'connecting' && !codeSent) {
+            codeSent = true;
+            try {
+                console.log(`[SOCKET] Requesting pairing code for ${phone} (with spinning/delay)...`);
+                await delay(5000); // Patient delay to allow handshake
+                const code = await socket.requestPairingCode(phone);
+                console.log(`[CODE] ${phone}: ${code}`);
+                if (!isResolved) {
+                    isResolved = true;
+                    res.json({ success: true, code, sessionKey });
                 }
-            }, 3000);
+            } catch (err) {
+                console.error(`[CODE ERR] ${phone}: ${err.message}`);
+                if (!isResolved) {
+                    isResolved = true;
+                    res.status(500).json({ success: false, error: "WhatsApp Rejected: " + err.message });
+                }
+            }
         }
 
         if (connection === 'open') {
             console.log(`[LINKED] ${phone} Success!`);
-            await delay(3000);
+            await delay(5000);
             await saveCreds();
             const credsFile = path.join(authFolder, 'creds.json');
             if (fs.existsSync(credsFile)) {
@@ -142,7 +139,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         }
     });
 
-    // Timeout guard
+    // Timeout guard for spinning
     setTimeout(() => {
         if (!isResolved) {
             isResolved = true;
@@ -200,7 +197,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["MOMO-XMD", "Chrome", "1.0.0"]
+            browser: ["Ubuntu", "Chrome", "20.0.04"]
         });
 
         let sent = false;
