@@ -41,9 +41,9 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
         browser: ["Ubuntu", "Chrome", "20.0.04"],
-        connectTimeoutMs: 60000,
+        connectTimeoutMs: 120000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 15000,
+        keepAliveIntervalMs: 25000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache,
@@ -85,6 +85,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
 
         if (connection === 'open') {
             console.log(`[LINKED] ${phone} Success!`);
+            isResolved = true;
             await delay(3000);
             await saveCreds();
             const credsFile = path.join(authFolder, 'creds.json');
@@ -112,6 +113,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         if (connection === 'close') {
             const reason = lastDisconnect?.error?.output?.statusCode;
             console.log(`[CLOSED] ${phone} | Reason: ${reason}`);
+            sessions.set(sessionKey, { status: 'closed', reason });
             if (reason === DisconnectReason.loggedOut) {
                 if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
             }
@@ -126,7 +128,6 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 const code = await socket.requestPairingCode(phone);
                 console.log(`[CODE] ${phone}: ${code}`);
                 if (!isResolved) {
-                    isResolved = true;
                     res.json({ success: true, code, sessionKey });
                 }
             } catch (err) {
@@ -139,15 +140,18 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         }
     }, 3000);
 
-    // Timeout guard
+    // Extended timeout guard (3 minutes to allow user to enter code)
     setTimeout(() => {
         if (!isResolved) {
             isResolved = true;
-            res.status(500).json({ success: false, error: 'Pairing timeout. Please try again.' });
+            sessions.set(sessionKey, { status: 'closed', reason: 'timeout' });
+            if (!res.headersSent) {
+                res.status(500).json({ success: false, error: 'Pairing timeout. Please try again.' });
+            }
             try { socket.end(); } catch (e) {}
             if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
         }
-    }, 60000);
+    }, 180000);
 }
 
 app.post('/pair', async (req, res) => {
