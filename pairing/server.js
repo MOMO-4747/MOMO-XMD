@@ -25,7 +25,6 @@ const sessions = new Map();
 const mutex = new Mutex();
 const msgRetryCounterCache = new NodeCache();
 
-// Global error handling
 process.on('unhandledRejection', (err) => console.error('[UNHANDLED]', err));
 process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
@@ -41,10 +40,11 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
+        // Restoring exact historical browser identity that worked successfully
+        browser: ["MOMO-XMD", "Chrome", "1.0.0"],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 10000,
+        keepAliveIntervalMs: 15000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache,
@@ -73,7 +73,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
     });
 
     let isResolved = false;
-    let codeSent = false;
+    let codeRequested = false;
 
     socket.ev.on('creds.update', saveCreds);
 
@@ -85,29 +85,31 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
             sessions.set(sessionKey, { status: connection });
         }
 
-        if (connection === 'connecting' && !codeSent) {
-            codeSent = true;
-            try {
-                console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
-                await delay(4000);
-                const code = await socket.requestPairingCode(phone);
-                console.log(`[CODE] ${phone}: ${code}`);
-                if (!isResolved) {
-                    isResolved = true;
-                    res.json({ success: true, code, sessionKey });
+        // Request pairing code as soon as socket is open or connecting/ready
+        if (!codeRequested) {
+            codeRequested = true;
+            setTimeout(async () => {
+                try {
+                    console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
+                    const code = await socket.requestPairingCode(phone);
+                    console.log(`[CODE] ${phone}: ${code}`);
+                    if (!isResolved) {
+                        isResolved = true;
+                        res.json({ success: true, code, sessionKey });
+                    }
+                } catch (err) {
+                    console.error(`[CODE ERR] ${phone}: ${err.message}`);
+                    if (!isResolved) {
+                        isResolved = true;
+                        res.status(500).json({ success: false, error: "WhatsApp Rejected: " + err.message });
+                    }
                 }
-            } catch (err) {
-                console.error(`[CODE ERR] ${phone}: ${err.message}`);
-                if (!isResolved) {
-                    isResolved = true;
-                    res.status(500).json({ success: false, error: "WhatsApp Rejected: " + err.message });
-                }
-            }
+            }, 3000);
         }
 
         if (connection === 'open') {
             console.log(`[LINKED] ${phone} Success!`);
-            await delay(5000);
+            await delay(3000);
             await saveCreds();
             const credsFile = path.join(authFolder, 'creds.json');
             if (fs.existsSync(credsFile)) {
@@ -140,7 +142,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         }
     });
 
-    // Timeout guard if connecting doesn't trigger
+    // Timeout guard
     setTimeout(() => {
         if (!isResolved) {
             isResolved = true;
@@ -148,7 +150,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
             try { socket.end(); } catch (e) {}
             if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
         }
-    }, 50000);
+    }, 60000);
 }
 
 app.post('/pair', async (req, res) => {
@@ -198,7 +200,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'fatal' }),
-            browser: ["Ubuntu", "Chrome", "20.0.04"]
+            browser: ["MOMO-XMD", "Chrome", "1.0.0"]
         });
 
         let sent = false;
