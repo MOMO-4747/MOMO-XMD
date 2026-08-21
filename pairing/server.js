@@ -23,8 +23,8 @@ if (!fs.existsSync(publicPath)) {
     fs.mkdirSync(publicPath, { recursive: true });
 }
 
-// Correct Skull Image from repo
-const SKULL_IMAGE = "https://raw.githubusercontent.com/MOMO-4747/MOMO-XMD/main/media/momo_hacker.png";
+// User provided Blue Skull Logo
+const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
 
 // UI Implementation
 const htmlIndex = `<!DOCTYPE html>
