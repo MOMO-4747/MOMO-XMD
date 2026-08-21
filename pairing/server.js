@@ -37,7 +37,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: ["MOMO-XMD", "Chrome", "1.0.0"],
+        browser: Browsers.macOS("Safari"),
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 25000,
@@ -89,10 +89,8 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
             const reason = lastDisconnect?.error?.output?.statusCode;
             console.log(`[CLOSED] ${phone} | Reason: ${reason}`);
             sessions.set(sessionKey, { status: 'closed', reason });
-            
-            // If connection closed with 515 or 408 before linking, attempt quick reconnect if not resolved
-            if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.connectionRestart)) {
-                console.log(`[RETRY] Attempting reconnection for ${phone}...`);
+            if (reason === DisconnectReason.loggedOut) {
+                if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
             }
         }
     });
@@ -179,7 +177,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'silent' }),
-            browser: ["MOMO-XMD", "Chrome", "1.0.0"]
+            browser: Browsers.macOS("Safari")
         });
 
         let sent = false;
