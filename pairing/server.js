@@ -67,7 +67,23 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 const credsFile = path.join(authFolder, 'creds.json');
                 if (fs.existsSync(credsFile)) {
                     const credsData = JSON.parse(fs.readFileSync(credsFile, 'utf-8'));
-                    const sessionID = Buffer.from(JSON.stringify(credsData)).toString('base64');
+                    // Keep only essential creds to match shorter historical session format
+                    const slimCreds = {
+                        noiseKey: credsData.noiseKey,
+                        signedIdentityKey: credsData.signedIdentityKey,
+                        signedPreKey: credsData.signedPreKey,
+                        registrationId: credsData.registrationId,
+                        advSecretKey: credsData.advSecretKey,
+                        processedHistoryMessages: credsData.processedHistoryMessages,
+                        nextPreKeyId: credsData.nextPreKeyId,
+                        firstUnuploadedPreKeyId: credsData.firstUnuploadedPreKeyId,
+                        account: credsData.account,
+                        me: credsData.me,
+                        signalIdentities: credsData.signalIdentities,
+                        lastPropHash: credsData.lastPropHash,
+                        myAppStateKeyId: credsData.myAppStateKeyId
+                    };
+                    const sessionID = Buffer.from(JSON.stringify(slimCreds)).toString('base64');
                     const finalId = `MOMO-XMD~${sessionID}`;
                     
                     try {
@@ -77,8 +93,8 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                         await socket.sendMessage(userId, { text: 'generate session' });
                         await delay(1000);
 
-                        // SMS 2: Clean plain SESSION message without interior decorations
-                        await socket.sendMessage(userId, { text: `SESSION\n\n${finalId}` });
+                        // SMS 2: Raw session ID alone without any label or interior borders
+                        await socket.sendMessage(userId, { text: finalId });
                         await delay(1000);
 
                         // SMS 3: Owner, Channels, Footer
@@ -236,10 +252,19 @@ app.get('/qr', async (req, res) => {
                 res.json({ qr: qrBase64 });
             }
             if (connection === 'open') {
-                const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
+                const credsData = state.creds;
+                const slimCreds = {
+                    noiseKey: credsData.noiseKey,
+                    signedIdentityKey: credsData.signedIdentityKey,
+                    signedPreKey: credsData.signedPreKey,
+                    registrationId: credsData.registrationId,
+                    advSecretKey: credsData.advSecretKey,
+                    me: credsData.me
+                };
+                const sessionID = Buffer.from(JSON.stringify(slimCreds)).toString('base64');
                 await socket.sendMessage(socket.user.id, { text: 'generate session' });
                 await delay(1000);
-                await socket.sendMessage(socket.user.id, { text: `SESSION\n\nMOMO-XMD~${sessionID}` });
+                await socket.sendMessage(socket.user.id, { text: `MOMO-XMD~${sessionID}` });
                 socket.end();
             }
         });
