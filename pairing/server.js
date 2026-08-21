@@ -12,6 +12,7 @@ const fs = require('fs');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const Boom = require('@hapi/boom');
 
 const app = express();
 app.use(express.json());
@@ -111,10 +112,11 @@ const htmlIndex = `<!DOCTYPE html>
                         <p style="color: #00ffcc; font-weight: bold;">Pairing Code Ready!</p>
                         <div class="code-box" id="codeText">\${data.code}</div>
                         <button class="copy-btn" id="copyBtn" onclick="copyCode('\${data.code}')">COPY CODE</button>
+                        <p id="status-msg" style="font-size: 12px; color: #88ccff; margin-top: 10px;">Waiting for link...</p>
                     \`;
                     pollStatus(data.sessionKey);
                 } else {
-                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.message || 'Failed. Try again.'}</p>\`;
+                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.message || 'Failed'}</p>\`;
                 }
             } catch (err) {
                 resultDiv.innerHTML = \`<p style="color: #ff4444;">Network error.</p>\`;
@@ -134,9 +136,7 @@ const htmlIndex = `<!DOCTYPE html>
                     copyBtn.innerText = 'COPY CODE';
                     copyBtn.style.background = '#00ffcc';
                 }, 2000);
-            } catch (err) {
-                console.error('Fallback copy failed', err);
-            }
+            } catch (err) {}
             document.body.removeChild(textArea);
         }
         async function pollStatus(key) {
@@ -145,6 +145,15 @@ const htmlIndex = `<!DOCTYPE html>
                 try {
                     const res = await fetch('/session-status/' + key);
                     const data = await res.json();
+                    const statusMsg = document.getElementById('status-msg');
+                    if (statusMsg) {
+                        if (data.error) {
+                            statusMsg.innerHTML = '<span style="color: #ff4444;">Error: ' + data.error + '</span>';
+                            clearInterval(pollInterval);
+                        } else {
+                            statusMsg.innerText = "Status: " + (data.status || 'waiting');
+                        }
+                    }
                     if (data.status === 'connected') {
                         document.getElementById('result').innerHTML = '<p style="color: #00ff00; font-weight: bold; font-size: 24px;">✔ LINKED SUCCESSFULLY!</p>';
                         clearInterval(pollInterval);
@@ -168,12 +177,12 @@ const PROXY_URL = process.env.PROXY_URL || null;
 
 app.get('/session-status/:key', (req, res) => {
     const session = sessions.get(req.params.key);
-    res.json({ status: session?.status || 'waiting' });
+    res.json({ status: session?.status || 'waiting', error: session?.error || null });
 });
 
 app.post('/pair', async (req, res) => {
     let { number } = req.body;
-    if (!number) return res.status(400).json({ success: false });
+    if (!number) return res.status(400).json({ success: false, message: 'Namba inahitajika' });
     let cleanNumber = String(number).replace(/[^0-9]/g, '');
     
     const release = await mutex.acquire();
@@ -191,7 +200,7 @@ app.post('/pair', async (req, res) => {
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
         const startPairing = async () => {
-            console.log(`[SOCKET] Starting fresh session for ${cleanNumber}...`);
+            console.log(`[SOCKET] Starting for ${cleanNumber}...`);
             socket = makeWASocket({
                 version,
                 auth: {
@@ -213,8 +222,8 @@ app.post('/pair', async (req, res) => {
 
             socket.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect } = update;
-                if (connection === 'connecting') {
-                    sessions.set(sessionKey, { status: 'connecting' });
+                if (connection) {
+                    sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection });
                 }
 
                 if (connection === 'open') {
@@ -233,15 +242,22 @@ app.post('/pair', async (req, res) => {
                     } catch (e) {}
                     
                     setTimeout(() => {
-                        socket.end(undefined);
+                        try { socket.end(undefined); } catch (e) {}
                         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                    }, 20000);
+                    }, 15000);
                 }
 
                 if (connection === 'close') {
                     const reason = lastDisconnect?.error?.output?.statusCode;
-                    console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason}`);
+                    const errorMsg = lastDisconnect?.error?.message || 'Disconnected';
+                    console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason} | Error: ${errorMsg}`);
                     
+                    if (reason === 403) {
+                        sessions.set(sessionKey, { ...sessions.get(sessionKey), status: 'failed', error: 'Forbidden (403) - Number might be blocked or IP flagged.' });
+                    } else if (reason === 401) {
+                        sessions.set(sessionKey, { ...sessions.get(sessionKey), status: 'failed', error: 'Unauthorized (401) - Please refresh and try again.' });
+                    }
+
                     if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired)) {
                         console.log(`[RETRY] Reconnecting for ${cleanNumber}...`);
                         setTimeout(() => startPairing(), 2000);
@@ -249,11 +265,10 @@ app.post('/pair', async (req, res) => {
                 }
             });
 
-            // Increased delay to 10s for maximum socket stability
-            await new Promise(r => setTimeout(r, 10000));
+            // Wait for socket to stabilize
+            await new Promise(r => setTimeout(r, 8000));
             if (!isResolved) {
                 try {
-                    console.log(`[CODE] Requesting code for ${cleanNumber}...`);
                     let code = await socket.requestPairingCode(cleanNumber);
                     if (code && !isResolved) {
                         isResolved = true;
@@ -263,7 +278,9 @@ app.post('/pair', async (req, res) => {
                     console.log(`[CODE-ERR] ${err.message}`);
                     if (!isResolved) {
                         isResolved = true;
-                        res.status(500).json({ success: false, message: 'WhatsApp rejected request. Refresh and try again.' });
+                        let msg = 'WhatsApp rejected request.';
+                        if (err.message.includes('403')) msg = 'Namba hii imezuiliwa na WhatsApp (403).';
+                        res.status(500).json({ success: false, message: msg });
                     }
                 }
             }
@@ -274,14 +291,14 @@ app.post('/pair', async (req, res) => {
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
-                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout' });
+                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Refresh page.' });
             }
         }, 120000);
 
     } catch (error) {
         if (!isResolved) {
             isResolved = true;
-            if (!res.headersSent) res.status(500).json({ success: false });
+            if (!res.headersSent) res.status(500).json({ success: false, message: 'Server Error' });
         }
     } finally {
         release();
