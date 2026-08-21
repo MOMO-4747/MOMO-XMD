@@ -5,8 +5,7 @@ const {
     Browsers,
     delay,
     makeCacheableSignalKeyStore,
-    DisconnectReason,
-    fetchLatestBaileysVersion
+    DisconnectReason
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const path = require('path');
@@ -31,7 +30,6 @@ process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 async function createWASocket(authFolder, phone, res, sessionKey) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     
-    // Use stable browser identity as requested
     const socket = makeWASocket({
         auth: {
             creds: state.creds,
@@ -39,14 +37,13 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: ["MOMO-XMD", "Chrome", "1.0.0"],
+        browser: Browsers.macOS("Chrome"),
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 10000,
+        keepAliveIntervalMs: 15000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
-        msgRetryCounterCache,
-        shouldSyncHistoryMessage: () => false
+        msgRetryCounterCache
     });
 
     let isResolved = false;
@@ -64,7 +61,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         if (connection === 'open') {
             console.log(`[LINKED] ${phone} Success!`);
             isResolved = true;
-            await delay(3000);
+            await delay(2000);
             await saveCreds();
             const credsFile = path.join(authFolder, 'creds.json');
             if (fs.existsSync(credsFile)) {
@@ -98,25 +95,28 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         }
     });
 
-    // Patient spinning delay (6 seconds) to ensure socket is fully open before requesting pairing code
+    // Request pairing code safely once socket is initializing/connecting
     setTimeout(async () => {
         if (!isResolved) {
             try {
-                console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
-                const code = await socket.requestPairingCode(phone);
-                console.log(`[CODE] ${phone}: ${code}`);
-                if (!isResolved) {
-                    res.json({ success: true, code, sessionKey });
+                if (!socket.authState.creds.registered) {
+                    console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
+                    await delay(1500);
+                    const code = await socket.requestPairingCode(phone);
+                    console.log(`[CODE] ${phone}: ${code}`);
+                    if (!isResolved) {
+                        res.json({ success: true, code, sessionKey });
+                    }
                 }
             } catch (err) {
                 console.error(`[CODE ERR] ${phone}: ${err.message}`);
                 if (!isResolved) {
                     isResolved = true;
-                    res.status(500).json({ success: false, error: "WhatsApp Rejected: " + err.message });
+                    res.status(500).json({ success: false, error: "WhatsApp Pairing Error: " + err.message });
                 }
             }
         }
-    }, 6000);
+    }, 4000);
 
     // Timeout guard (3 minutes)
     setTimeout(() => {
@@ -177,7 +177,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'silent' }),
-            browser: ["MOMO-XMD", "Chrome", "1.0.0"]
+            browser: Browsers.macOS("Chrome")
         });
 
         let sent = false;
