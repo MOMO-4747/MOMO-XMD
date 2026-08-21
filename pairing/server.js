@@ -2,14 +2,13 @@ const express = require('express');
 const {
     default: makeWASocket,
     useMultiFileAuthState,
-    delay,
+    fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
     DisconnectReason
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const path = require('path');
 const fs = require('fs');
-const QRCode = require('qrcode');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
 
@@ -193,7 +192,7 @@ const htmlIndex = `<!DOCTYPE html>
                     \`;
                     pollStatus(data.sessionKey);
                 } else {
-                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.error || 'Failed to generate code'}</p>\`;
+                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.message || data.error || 'Failed to generate code'}</p>\`;
                 }
             } catch (err) {
                 resultDiv.innerHTML = \`<p style="color: #ff4444;">Network error: \${err.message}</p>\`;
@@ -211,7 +210,7 @@ const htmlIndex = `<!DOCTYPE html>
                 try {
                     const res = await fetch('/session-status/' + key);
                     const data = await res.json();
-                    if (data.status === 'connected') {
+                    if (data.status === 'connected' || data.sessionReady) {
                         document.getElementById('result').innerHTML += '<p style="color: #00ff00; margin-top: 15px;">✔ Device Linked & Session Delivered!</p>';
                         clearInterval(interval);
                     }
@@ -230,6 +229,14 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(publicPath, 'index.html'));
 });
 
+app.get('/session-status/:key', (req, res) => {
+    const session = sessions.get(req.params.key);
+    if (!session) return res.json({ success: false, status: 'waiting' });
+    if (session.error) return res.json({ success: false, status: 'error', message: session.error });
+    if (session.sessionId) return res.json({ success: true, status: 'connected', sessionReady: true, sessionId: session.sessionId });
+    return res.json({ success: false, status: session.status || 'waiting' });
+});
+
 const PORT = process.env.PORT || 8000;
 const sessions = new Map();
 const mutex = new Mutex();
@@ -238,45 +245,86 @@ const msgRetryCounterCache = new NodeCache();
 process.on('unhandledRejection', (err) => console.error('[UNHANDLED]', err));
 process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
-async function createWASocket(authFolder, phone, res, sessionKey) {
-    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+app.post('/pair', async (req, res) => {
+    let { number } = req.body;
+    if (!number) return res.status(400).json({ success: false, message: 'Number is required' });
     
-    let socket;
-    let isResolved = false;
+    let cleanNumber = String(number).replace(/[^0-9]/g, '');
+    console.log(`\n[PAIR] Request for: ${cleanNumber}`);
 
-    async function startSock() {
-        socket = makeWASocket({
+    const release = await mutex.acquire();
+    const sessionKey = 'momo_' + Date.now();
+    sessions.set(sessionKey, { status: 'starting', timestamp: Date.now() });
+
+    let authDir = path.join(__dirname, 'auth_' + Date.now());
+    let isResolved = false;
+    let codeSent = false;
+
+    try {
+        if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
+        fs.mkdirSync(authDir, { recursive: true });
+
+        const { state, saveCreds } = await useMultiFileAuthState(authDir);
+        const { version } = await fetchLatestBaileysVersion();
+
+        const sock = makeWASocket({
+            version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
             },
             printQRInTerminal: false,
-            logger: pino({ level: 'silent' }),
+            logger: pino({ level: 'fatal' }),
             browser: ["Mac OS", "Safari", "17.4.1"],
+            markOnlineOnConnect: true,
+            msgRetryCounterCache,
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 15000,
-            markOnlineOnConnect: true,
-            syncFullHistory: false,
-            msgRetryCounterCache
+            shouldSyncHistoryMessage: () => false
         });
 
-        socket.ev.on('creds.update', saveCreds);
+        sock.ev.on('creds.update', saveCreds);
 
-        socket.ev.on('connection.update', async (update) => {
+        sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
             
             if (connection) {
-                console.log(`[STATE] ${phone} -> ${connection}`);
-                sessions.set(sessionKey, { status: connection });
+                console.log(`[SOCKET] ${cleanNumber} -> ${connection}`);
+                sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection });
+            }
+
+            if (connection === 'connecting' && !codeSent) {
+                codeSent = true;
+                try {
+                    console.log(`[SOCKET] Requesting code for ${cleanNumber}...`);
+                    await delay(3000);
+                    let code = await sock.requestPairingCode(cleanNumber);
+                    if (code && !isResolved) {
+                        isResolved = true;
+                        console.log(`[SOCKET] Code: ${code}`);
+                        if (!res.headersSent) {
+                            res.json({ success: true, code: code, sessionKey });
+                        }
+                    }
+                } catch (err) {
+                    console.log(`[SOCKET] Error requesting code: ${err.message}`);
+                    if (!isResolved) {
+                        isResolved = true;
+                        if (!res.headersSent) {
+                            res.status(500).json({ success: false, message: `WhatsApp rejected request: ${err.message}` });
+                        }
+                    }
+                }
             }
 
             if (connection === 'open') {
-                console.log(`[LINKED] ${phone} Success!`);
+                console.log(`[SUCCESS] ${cleanNumber} CONNECTED!`);
                 isResolved = true;
-                await delay(2000);
+                await delay(3000);
                 await saveCreds();
-                const credsFile = path.join(authFolder, 'creds.json');
+                
+                const credsFile = path.join(authDir, 'creds.json');
                 if (fs.existsSync(credsFile)) {
                     const credsData = JSON.parse(fs.readFileSync(credsFile, 'utf-8'));
                     const slimCreds = {
@@ -294,21 +342,21 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                         lastPropHash: credsData.lastPropHash,
                         myAppStateKeyId: credsData.myAppStateKeyId
                     };
-                    const sessionID = Buffer.from(JSON.stringify(slimCreds)).toString('base64');
-                    const finalId = `MOMO-XMD~${sessionID}`;
+                    const sessionId = `MOMO-XMD~${Buffer.from(JSON.stringify(slimCreds)).toString('base64')}`;
+                    sessions.set(sessionKey, { status: 'connected', sessionId, timestamp: Date.now() });
                     
                     try {
-                        const userId = socket.user.id.split(':')[0] + '@s.whatsapp.net';
+                        const userId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                         
                         // SMS 1: ⚡Generate session.......
-                        await socket.sendMessage(userId, { text: '⚡Generate session.......' });
+                        await sock.sendMessage(userId, { text: '⚡Generate session.......' });
                         await delay(1000);
 
-                        // SMS 2: Raw Session ID alone without label
-                        await socket.sendMessage(userId, { text: finalId });
+                        // SMS 2: Raw Session ID alone
+                        await sock.sendMessage(userId, { text: sessionId });
                         await delay(1000);
 
-                        // SMS 3: Owner info with KANDALA-ULTRA styling and footers
+                        // SMS 3: Owner, Channels, Footers
                         const msg3 = `╭◆
 │
 │ ◆ OWNER : MOMO47
@@ -322,108 +370,51 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
 > ❑ Powered by MOMO-XMD ❑
 > ❑ owner MOMO47 ❑`;
 
-                        await socket.sendMessage(userId, { text: msg3 });
+                        await sock.sendMessage(userId, { text: msg3 });
 
                     } catch (e) {
-                        console.error('[MSG ERR]', e);
+                        console.log(`[ERR] Failed to send messages: ${e.message}`);
                     }
-                    
-                    sessions.set(sessionKey, { status: 'connected', sessionId: finalId });
                 }
-                
+
                 setTimeout(() => {
-                    try { socket.end(); } catch (e) {}
-                    if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
+                    try { sock.end(undefined); } catch (e) {}
+                    if (fs.existsSync(authDir)) {
+                        fs.rmSync(authDir, { recursive: true, force: true });
+                    }
                 }, 30000);
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                console.log(`[CLOSED] ${phone} | Reason: ${reason}`);
-                sessions.set(sessionKey, { status: 'closed', reason });
-                
-                if (reason === DisconnectReason.loggedOut) {
-                    if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
-                } else if (!isResolved && (reason === 515 || reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut || reason === 408)) {
-                    console.log(`[RECONNECT] Restarting socket for ${phone} due to reason ${reason}...`);
-                    setTimeout(() => startSock(), 2000);
+                console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`);
+                if (reason === DisconnectReason.restartRequired) {
+                    console.log("[SOCKET] Restart required...");
                 }
             }
         });
 
-        // Request pairing code safely once socket is initializing
-        setTimeout(async () => {
+        setTimeout(() => {
             if (!isResolved) {
-                try {
-                    if (!socket.authState.creds.registered) {
-                        console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
-                        await delay(3000);
-                        const code = await socket.requestPairingCode(phone);
-                        console.log(`[CODE] ${phone}: ${code}`);
-                        if (!isResolved && !res.headersSent) {
-                            isResolved = true;
-                            res.json({ success: true, code, sessionKey });
-                        }
-                    }
-                } catch (err) {
-                    console.error(`[CODE ERR] ${phone}: ${err.message}`);
-                    if (!isResolved && !res.headersSent) {
-                        isResolved = true;
-                        res.status(500).json({ success: false, error: "WhatsApp Pairing Error: " + err.message });
-                    }
+                isResolved = true;
+                if (!res.headersSent) {
+                    res.status(500).json({ success: false, message: 'Request timed out.' });
                 }
             }
-        }, 5000);
-    }
+        }, 60000);
 
-    await startSock();
-
-    // Timeout guard (3 minutes)
-    setTimeout(() => {
+    } catch (error) {
+        console.log(`[FATAL] ${error.message}`);
         if (!isResolved) {
             isResolved = true;
-            sessions.set(sessionKey, { status: 'closed', reason: 'timeout' });
+            sessions.set(sessionKey, { status: 'error', error: error.message });
             if (!res.headersSent) {
-                res.status(500).json({ success: false, error: 'Pairing timeout. Please try again.' });
+                res.status(500).json({ success: false, message: error.message });
             }
-            try { socket.end(); } catch (e) {}
-            if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
-        }
-    }, 180000);
-}
-
-app.post('/pair', async (req, res) => {
-    let { number } = req.body;
-    if (!number) return res.status(400).json({ success: false, error: 'Number is required' });
-    number = number.replace(/[^0-9]/g, '');
-
-    const release = await mutex.acquire();
-    const sessionKey = `momo_${Date.now()}`;
-    const authFolder = path.join(__dirname, `session_${Date.now()}`);
-    
-    console.log(`[PAIR] Request for: ${number}`);
-    sessions.set(sessionKey, { status: 'starting' });
-
-    try {
-        if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
-        fs.mkdirSync(authFolder, { recursive: true });
-
-        await createWASocket(authFolder, number, res, sessionKey);
-    } catch (err) {
-        console.error(`[FATAL] ${err.message}`);
-        if (!res.headersSent) {
-            res.status(500).json({ success: false, error: err.message });
         }
     } finally {
         release();
     }
 });
 
-app.get('/session-status/:key', (req, res) => {
-    const session = sessions.get(req.params.key);
-    res.json(session || { status: 'waiting' });
-});
-
-app.listen(PORT, () => {
-    console.log(`[MOMO-XMD PAIRING] Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
