@@ -2,7 +2,6 @@ const express = require('express');
 const {
     default: makeWASocket,
     useMultiFileAuthState,
-    Browsers,
     delay,
     makeCacheableSignalKeyStore,
     DisconnectReason
@@ -30,6 +29,7 @@ process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 async function createWASocket(authFolder, phone, res, sessionKey) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     
+    // Exact match for the user's screenshot identity "Safari (Mac OS)"
     const socket = makeWASocket({
         auth: {
             creds: state.creds,
@@ -37,7 +37,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: Browsers.macOS("Safari"),
+        browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 25000,
@@ -177,7 +177,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'silent' }),
-            browser: Browsers.macOS("Safari")
+            browser: ["Safari (Mac OS)", "Safari", "17.4.1"]
         });
 
         let sent = false;
