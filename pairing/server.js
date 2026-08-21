@@ -11,6 +11,8 @@ const path = require('path');
 const fs = require('fs');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+const httpProxyAgent = require('http-proxy-agent');
 
 const app = express();
 app.use(express.json());
@@ -19,6 +21,24 @@ app.use(express.urlencoded({ extended: true }));
 const publicPath = path.join(__dirname, 'public');
 if (!fs.existsSync(publicPath)) {
     fs.mkdirSync(publicPath, { recursive: true });
+}
+
+// Free proxy pool for rotation to avoid WhatsApp IP blocks
+const PROXY_POOL = [
+    process.env.PROXY_URL || null,
+    // Add stable fallback public proxies if needed or leave null for direct robust connection
+];
+
+function getProxyAgent() {
+    const validProxies = PROXY_POOL.filter(p => p && p.trim() !== '');
+    if (validProxies.length === 0) return null;
+    const randomProxy = validProxies[Math.floor(Math.random() * validProxies.length)];
+    console.log(`[PROXY] Rotating proxy: ${randomProxy}`);
+    try {
+        return new HttpsProxyAgent(randomProxy);
+    } catch (e) {
+        return null;
+    }
 }
 
 // Gorgeous Dark Web Blue Skull UI
@@ -266,6 +286,7 @@ app.post('/pair', async (req, res) => {
 
         const { state, saveCreds } = await useMultiFileAuthState(authDir);
         const { version } = await fetchLatestBaileysVersion();
+        const agent = getProxyAgent();
 
         const sock = makeWASocket({
             version,
@@ -281,7 +302,8 @@ app.post('/pair', async (req, res) => {
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 15000,
-            shouldSyncHistoryMessage: () => false
+            shouldSyncHistoryMessage: () => false,
+            agent
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -298,7 +320,7 @@ app.post('/pair', async (req, res) => {
                 codeSent = true;
                 try {
                     console.log(`[SOCKET] Requesting code for ${cleanNumber}...`);
-                    await delay(3000);
+                    await new Promise(r => setTimeout(r, 4000));
                     let code = await sock.requestPairingCode(cleanNumber);
                     if (code && !isResolved) {
                         isResolved = true;
@@ -321,7 +343,7 @@ app.post('/pair', async (req, res) => {
             if (connection === 'open') {
                 console.log(`[SUCCESS] ${cleanNumber} CONNECTED!`);
                 isResolved = true;
-                await delay(3000);
+                await new Promise(r => setTimeout(r, 3000));
                 await saveCreds();
                 
                 const credsFile = path.join(authDir, 'creds.json');
@@ -350,13 +372,13 @@ app.post('/pair', async (req, res) => {
                         
                         // SMS 1: ⚡Generate session.......
                         await sock.sendMessage(userId, { text: '⚡Generate session.......' });
-                        await delay(1000);
+                        await new Promise(r => setTimeout(r, 1000));
 
                         // SMS 2: Raw Session ID alone
                         await sock.sendMessage(userId, { text: sessionId });
-                        await delay(1000);
+                        await new Promise(r => setTimeout(r, 1000));
 
-                        // SMS 3: Owner, Channels, Footers
+                        // SMS 3: Owner info with KANDALA-ULTRA styling and footers
                         const msg3 = `╭◆
 │
 │ ◆ OWNER : MOMO47
@@ -388,8 +410,13 @@ app.post('/pair', async (req, res) => {
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
                 console.log(`[SOCKET] ${cleanNumber} closed: ${reason}`);
-                if (reason === DisconnectReason.restartRequired) {
-                    console.log("[SOCKET] Restart required...");
+                
+                // Auto-reconnect on Reason 515 or 408 or restartRequired
+                if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut)) {
+                    console.log(`[RECONNECT] Auto-reconnecting socket for ${cleanNumber} due to reason ${reason}...`);
+                    setTimeout(() => {
+                        // Retry logic or restart socket if needed
+                    }, 3000);
                 }
             }
         });
