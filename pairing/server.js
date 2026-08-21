@@ -70,7 +70,7 @@ const htmlIndex = `<!DOCTYPE html>
             margin-top: 20px; font-family: 'Courier Prime', monospace; font-size: 26px; color: #00ffcc;
             letter-spacing: 5px; font-weight: bold;
         }
-        .copy-btn { background: #00ffcc; color: #030712; margin-top: 15px; padding: 10px 20px; font-size: 15px; }
+        .copy-btn { background: #00ffcc; color: #030712; margin-top: 15px; padding: 10px 20px; font-size: 15px; border-radius: 8px; border: none; cursor: pointer; font-family: 'Orbitron'; font-weight: bold; }
         .footer { margin-top: 35px; font-size: 12px; color: #557799; font-family: 'Courier Prime', monospace; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
@@ -110,7 +110,7 @@ const htmlIndex = `<!DOCTYPE html>
                     resultDiv.innerHTML = \`
                         <p style="color: #00ffcc; font-weight: bold;">Pairing Code Ready!</p>
                         <div class="code-box" id="codeText">\${data.code}</div>
-                        <button class="copy-btn" onclick="copyCode()">COPY CODE</button>
+                        <button class="copy-btn" id="copyBtn" onclick="copyCode('\${data.code}')">COPY CODE</button>
                     \`;
                     pollStatus(data.sessionKey);
                 } else {
@@ -120,10 +120,24 @@ const htmlIndex = `<!DOCTYPE html>
                 resultDiv.innerHTML = \`<p style="color: #ff4444;">Network error.</p>\`;
             }
         }
-        function copyCode() {
-            const codeText = document.getElementById('codeText').innerText;
-            navigator.clipboard.writeText(codeText);
-            alert('Code copied!');
+        function copyCode(text) {
+            const copyBtn = document.getElementById('copyBtn');
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                copyBtn.innerText = 'COPIED!';
+                copyBtn.style.background = '#ffffff';
+                setTimeout(() => {
+                    copyBtn.innerText = 'COPY CODE';
+                    copyBtn.style.background = '#00ffcc';
+                }, 2000);
+            } catch (err) {
+                console.error('Fallback copy failed', err);
+            }
+            document.body.removeChild(textArea);
         }
         async function pollStatus(key) {
             if (pollInterval) clearInterval(pollInterval);
@@ -177,6 +191,7 @@ app.post('/pair', async (req, res) => {
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
         const startPairing = async () => {
+            console.log(`[SOCKET] Starting fresh session for ${cleanNumber}...`);
             socket = makeWASocket({
                 version,
                 auth: {
@@ -220,7 +235,7 @@ app.post('/pair', async (req, res) => {
                     setTimeout(() => {
                         socket.end(undefined);
                         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                    }, 15000);
+                    }, 20000);
                 }
 
                 if (connection === 'close') {
@@ -234,10 +249,11 @@ app.post('/pair', async (req, res) => {
                 }
             });
 
-            // Delay pairing code request to ensure socket stability
-            await new Promise(r => setTimeout(r, 8000));
+            // Increased delay to 10s for maximum socket stability
+            await new Promise(r => setTimeout(r, 10000));
             if (!isResolved) {
                 try {
+                    console.log(`[CODE] Requesting code for ${cleanNumber}...`);
                     let code = await socket.requestPairingCode(cleanNumber);
                     if (code && !isResolved) {
                         isResolved = true;
@@ -247,7 +263,7 @@ app.post('/pair', async (req, res) => {
                     console.log(`[CODE-ERR] ${err.message}`);
                     if (!isResolved) {
                         isResolved = true;
-                        res.status(500).json({ success: false, message: 'WhatsApp rejected request.' });
+                        res.status(500).json({ success: false, message: 'WhatsApp rejected request. Refresh and try again.' });
                     }
                 }
             }
@@ -260,7 +276,7 @@ app.post('/pair', async (req, res) => {
                 isResolved = true;
                 if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout' });
             }
-        }, 100000);
+        }, 120000);
 
     } catch (error) {
         if (!isResolved) {
