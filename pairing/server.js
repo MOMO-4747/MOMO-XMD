@@ -13,6 +13,8 @@ const fs = require('fs');
 const QRCode = require('qrcode');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
+const { HttpProxyAgent } = require('http-proxy-agent');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 app.use(express.json());
@@ -24,28 +26,47 @@ const sessions = new Map();
 const mutex = new Mutex();
 const msgRetryCounterCache = new NodeCache();
 
+// Free/Public proxy pool or environment proxy
+const proxies = [
+    // Direct connection first as requested
+    null
+];
+
+function getAgent() {
+    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
+    if (!proxy) return undefined;
+    if (proxy.startsWith('https')) return new HttpsProxyAgent(proxy);
+    return new HttpProxyAgent(proxy);
+}
+
 process.on('unhandledRejection', (err) => console.error('[UNHANDLED]', err));
 process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
 async function createWASocket(authFolder, phone, res, sessionKey) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     
-    const socket = makeWASocket({
+    const agent = getAgent();
+    const socketOptions = {
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
         },
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: Browsers.macOS("Chrome"),
+        browser: ["Chrome (Linux)", "Chrome", "120.0.0.0"],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 15000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache
-    });
+    };
 
+    if (agent) {
+        socketOptions.agent = agent;
+    }
+
+    const socket = makeWASocket(socketOptions);
     let isResolved = false;
 
     socket.ev.on('creds.update', saveCreds);
@@ -95,13 +116,13 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         }
     });
 
-    // Request pairing code safely once socket is initializing/connecting
+    // Request pairing code safely once socket is initializing
     setTimeout(async () => {
         if (!isResolved) {
             try {
                 if (!socket.authState.creds.registered) {
                     console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
-                    await delay(1500);
+                    await delay(2000);
                     const code = await socket.requestPairingCode(phone);
                     console.log(`[CODE] ${phone}: ${code}`);
                     if (!isResolved) {
@@ -116,7 +137,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 }
             }
         }
-    }, 4000);
+    }, 5000);
 
     // Timeout guard (3 minutes)
     setTimeout(() => {
@@ -177,7 +198,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'silent' }),
-            browser: Browsers.macOS("Chrome")
+            browser: ["Chrome (Linux)", "Chrome", "120.0.0.0"]
         });
 
         let sent = false;
