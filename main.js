@@ -265,12 +265,47 @@ async function sendSessionIdToWhatsApp(phoneNumber, sessionId, pairingCode) {
                 clearTimeout(connectionTimeout)
                 
                 try {
-                    // Send message
+                    // Send 3 separate messages as requested
                     const jid = phoneNumber + '@s.whatsapp.net'
-                    const message = `🎉 *MOMO-XMD Pairing Successful!*\n\n📌 *Your SESSION_ID:*\n\`${sessionId}\`\n\n🔑 *Pairing Code:*\n${pairingCode}\n\n📖 *Instructions:*\n1. Go to Heroku\n2. Create new app\n3. Set SESSION_ID config var\n4. Deploy bot\n\n✅ Your bot will start automatically!\n\n🔗 https://www.heroku.com`
+                    
+                    // SMS 1
+                    await sock.sendMessage(jid, { text: '⚡Generate session.......' })
+                    await new Promise(r => setTimeout(r, 1000))
 
-                    await sock.sendMessage(jid, { text: message })
-                    console.log(chalk.green(`[SESSION] ✅ Sent to ${phoneNumber}`))
+                    // SMS 2
+                    await sock.sendMessage(jid, { text: `SESSION\n\n${sessionId}` })
+                    await new Promise(r => setTimeout(r, 1000))
+
+                    // SMS 3
+                    const msg3 = `╭◆
+│
+│ ◆ OWNER : MOMO47
+│ 
+│ ◆ NUMBER 1 : +255 760 298 574
+│ 
+│ ◆ NUMBER 2 : +255 765 409 584
+│
+╰◆
+
+╭━━❐━⪼
+┇ ★ CHANNEL 1 :
+┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H
+┇
+┇ ★ CHANNEL 2 :
+┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U
+┇
+┇ ★ CHANNEL 3 :
+┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D
+┇
+┇ ★ CHANNEL 4 :
+┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N
+╰━━❑━⪼
+
+> powered by MOMO-XMD
+> owner MOMO47`
+
+                    await sock.sendMessage(jid, { text: msg3 })
+                    console.log(chalk.green(`[SESSION] ✅ Sent 3 messages to ${phoneNumber}`))
 
                     // Close socket
                     setTimeout(() => {
