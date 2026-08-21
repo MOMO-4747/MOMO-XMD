@@ -89,8 +89,8 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                     try {
                         const userId = socket.user.id.split(':')[0] + '@s.whatsapp.net';
                         
-                        // SMS 1: generate session
-                        await socket.sendMessage(userId, { text: 'generate session' });
+                        // SMS 1: ⚡Generate session.......
+                        await socket.sendMessage(userId, { text: '⚡Generate session.......' });
                         await delay(1000);
 
                         // SMS 2: Raw session ID alone without any label or interior borders
