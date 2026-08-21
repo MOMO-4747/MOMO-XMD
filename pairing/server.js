@@ -12,8 +12,6 @@ const fs = require('fs');
 const QRCode = require('qrcode');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
-const { HttpProxyAgent } = require('http-proxy-agent');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 app.use(express.json());
@@ -25,121 +23,108 @@ const sessions = new Map();
 const mutex = new Mutex();
 const msgRetryCounterCache = new NodeCache();
 
-// Webshare / Free Proxy Pool rotation to bypass IP blocks
-const proxyPool = [
-    // Add custom proxies if available, otherwise use direct fallback with agent support
-    process.env.PROXY_URL || null
-].filter(Boolean);
-
-function getProxyAgent() {
-    if (proxyPool.length === 0) return undefined;
-    const proxy = proxyPool[Math.floor(Math.random() * proxyPool.length)];
-    console.log(`[PROXY] Using proxy: ${proxy}`);
-    return {
-        http: new HttpProxyAgent(proxy),
-        https: new HttpsProxyAgent(proxy)
-    };
-}
-
 process.on('unhandledRejection', (err) => console.error('[UNHANDLED]', err));
 process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
 async function createWASocket(authFolder, phone, res, sessionKey) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     
-    const proxies = getProxyAgent();
-    const socketConfig = {
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
-        },
-        printQRInTerminal: false,
-        logger: pino({ level: 'silent' }),
-        browser: ["Mac OS", "Safari", "17.4.1"],
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 15000,
-        markOnlineOnConnect: true,
-        syncFullHistory: false,
-        msgRetryCounterCache
-    };
-
-    if (proxies) {
-        socketConfig.agent = proxies.https;
-    }
-
-    const socket = makeWASocket(socketConfig);
+    let socket;
     let isResolved = false;
 
-    socket.ev.on('creds.update', saveCreds);
+    async function startSock() {
+        socket = makeWASocket({
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+            },
+            printQRInTerminal: false,
+            logger: pino({ level: 'silent' }),
+            browser: ["Mac OS", "Safari", "17.4.1"],
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0,
+            keepAliveIntervalMs: 15000,
+            markOnlineOnConnect: true,
+            syncFullHistory: false,
+            msgRetryCounterCache
+        });
 
-    socket.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update;
-        
-        if (connection) {
-            console.log(`[STATE] ${phone} -> ${connection}`);
-            sessions.set(sessionKey, { status: connection });
-        }
+        socket.ev.on('creds.update', saveCreds);
 
-        if (connection === 'open') {
-            console.log(`[LINKED] ${phone} Success!`);
-            isResolved = true;
-            await delay(2000);
-            await saveCreds();
-            const credsFile = path.join(authFolder, 'creds.json');
-            if (fs.existsSync(credsFile)) {
-                const credsContent = fs.readFileSync(credsFile, 'utf-8');
-                const sessionID = Buffer.from(credsContent).toString('base64');
-                const finalId = `MOMO-XMD~${sessionID}`;
-                
-                try {
-                    const userId = socket.user.id.split(':')[0] + '@s.whatsapp.net';
-                    await socket.sendMessage(userId, { 
-                        text: `*✅ MOMO-XMD CONNECTED!*\n\n*SESSION ID:*\n\n${finalId}\n\n*OWNER: MOMO47*` 
-                    });
-                } catch (e) {}
-                
-                sessions.set(sessionKey, { status: 'connected', sessionId: finalId });
-            }
+        socket.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect } = update;
             
-            setTimeout(() => {
-                try { socket.end(); } catch (e) {}
-                if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
-            }, 30000);
-        }
-
-        if (connection === 'close') {
-            const reason = lastDisconnect?.error?.output?.statusCode;
-            console.log(`[CLOSED] ${phone} | Reason: ${reason}`);
-            sessions.set(sessionKey, { status: 'closed', reason });
-            if (reason === DisconnectReason.loggedOut) {
-                if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
+            if (connection) {
+                console.log(`[STATE] ${phone} -> ${connection}`);
+                sessions.set(sessionKey, { status: connection });
             }
-        }
-    });
 
-    // Request pairing code safely once socket is initializing
-    setTimeout(async () => {
-        if (!isResolved) {
-            try {
-                if (!socket.authState.creds.registered) {
-                    console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
-                    await delay(3000);
-                    const code = await socket.requestPairingCode(phone);
-                    console.log(`[CODE] ${phone}: ${code}`);
+            if (connection === 'open') {
+                console.log(`[LINKED] ${phone} Success!`);
+                isResolved = true;
+                await delay(2000);
+                await saveCreds();
+                const credsFile = path.join(authFolder, 'creds.json');
+                if (fs.existsSync(credsFile)) {
+                    const credsContent = fs.readFileSync(credsFile, 'utf-8');
+                    const sessionID = Buffer.from(credsContent).toString('base64');
+                    const finalId = `MOMO-XMD~${sessionID}`;
+                    
+                    try {
+                        const userId = socket.user.id.split(':')[0] + '@s.whatsapp.net';
+                        await socket.sendMessage(userId, { 
+                            text: `*✅ MOMO-XMD CONNECTED!*\n\n*SESSION ID:*\n\n${finalId}\n\n*OWNER: MOMO47*` 
+                        });
+                    } catch (e) {}
+                    
+                    sessions.set(sessionKey, { status: 'connected', sessionId: finalId });
+                }
+                
+                setTimeout(() => {
+                    try { socket.end(); } catch (e) {}
+                    if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
+                }, 30000);
+            }
+
+            if (connection === 'close') {
+                const reason = lastDisconnect?.error?.output?.statusCode;
+                console.log(`[CLOSED] ${phone} | Reason: ${reason}`);
+                sessions.set(sessionKey, { status: 'closed', reason });
+                
+                if (reason === DisconnectReason.loggedOut) {
+                    if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
+                } else if (!isResolved && (reason === 515 || reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut || reason === 408)) {
+                    console.log(`[RECONNECT] Restarting socket for ${phone} due to reason ${reason}...`);
+                    setTimeout(() => startSock(), 2000);
+                }
+            }
+        });
+
+        // Request pairing code safely once socket is initializing
+        setTimeout(async () => {
+            if (!isResolved) {
+                try {
+                    if (!socket.authState.creds.registered) {
+                        console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
+                        await delay(3000);
+                        const code = await socket.requestPairingCode(phone);
+                        console.log(`[CODE] ${phone}: ${code}`);
+                        if (!isResolved) {
+                            res.json({ success: true, code, sessionKey });
+                        }
+                    }
+                } catch (err) {
+                    console.error(`[CODE ERR] ${phone}: ${err.message}`);
                     if (!isResolved) {
-                        res.json({ success: true, code, sessionKey });
+                        isResolved = true;
+                        res.status(500).json({ success: false, error: "WhatsApp Pairing Error: " + err.message });
                     }
                 }
-            } catch (err) {
-                console.error(`[CODE ERR] ${phone}: ${err.message}`);
-                if (!isResolved) {
-                    isResolved = true;
-                    res.status(500).json({ success: false, error: "WhatsApp Pairing Error: " + err.message });
-                }
             }
-        }
-    }, 5000);
+        }, 5000);
+    }
+
+    await startSock();
 
     // Timeout guard (3 minutes)
     setTimeout(() => {
@@ -222,4 +207,8 @@ app.get('/qr', async (req, res) => {
     } catch (e) { if (!res.headersSent) res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));
+if (require.main === module) {
+    app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));
+}
+
+module.exports = app;
