@@ -67,7 +67,6 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 const credsFile = path.join(authFolder, 'creds.json');
                 if (fs.existsSync(credsFile)) {
                     const credsData = JSON.parse(fs.readFileSync(credsFile, 'utf-8'));
-                    // Minify JSON to reduce base64 length
                     const sessionID = Buffer.from(JSON.stringify(credsData)).toString('base64');
                     const finalId = `MOMO-XMD~${sessionID}`;
                     
@@ -78,15 +77,8 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                         await socket.sendMessage(userId, { text: 'generate session' });
                         await delay(1000);
 
-                        // SMS 2: Session ID Box
-                        const msg2 = `╭━━❐━⪼
-┇ ◉ SESSION LINKED ◉
-┇ 
-┇ ◉ Paste it as SESSION during deploy
-┇ 
-┇ ◉ Session ID: ${finalId}
-╰━━❑━⪼`;
-                        await socket.sendMessage(userId, { text: msg2 });
+                        // SMS 2: Clean plain SESSION message without interior decorations
+                        await socket.sendMessage(userId, { text: `SESSION\n\n${finalId}` });
                         await delay(1000);
 
                         // SMS 3: Owner, Channels, Footer
@@ -247,7 +239,7 @@ app.get('/qr', async (req, res) => {
                 const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
                 await socket.sendMessage(socket.user.id, { text: 'generate session' });
                 await delay(1000);
-                await socket.sendMessage(socket.user.id, { text: `╭━━❐━⪼\n┇ ◉ SESSION LINKED ◉\n┇ \n┇ ◉ Paste it as SESSION during deploy\n┇ \n┇ ◉ Session ID: MOMO-XMD~${sessionID}\n╰━━❑━⪼` });
+                await socket.sendMessage(socket.user.id, { text: `SESSION\n\nMOMO-XMD~${sessionID}` });
                 socket.end();
             }
         });
