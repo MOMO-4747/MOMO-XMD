@@ -25,7 +25,7 @@ if (!fs.existsSync(publicPath)) {
 // User provided Blue Skull Logo
 const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
 
-// UI Implementation with Auto-Retry Status
+// UI Implementation
 const htmlIndex = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -208,7 +208,7 @@ app.post('/pair', async (req, res) => {
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
         async function initSocket() {
-            console.log(`[SOCKET] Initializing for ${cleanNumber}...`);
+            console.log(`[SOCKET] Initializing for ${cleanNumber} with Safari Mac OS Identity...`);
             socket = makeWASocket({
                 version,
                 auth: {
@@ -217,12 +217,13 @@ app.post('/pair', async (req, res) => {
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: 'fatal' }),
-                browser: ["Mac OS", "Safari", "17.4.1"],
+                // Exact Browser Identity requested by user
+                browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
                 markOnlineOnConnect: true,
                 msgRetryCounterCache,
                 connectTimeoutMs: 60000,
                 defaultQueryTimeoutMs: 60000,
-                keepAliveIntervalMs: 10000, // Faster keep-alive
+                keepAliveIntervalMs: 15000,
                 generateHighQualityThumbnail: true,
                 agent
             });
@@ -239,10 +240,13 @@ app.post('/pair', async (req, res) => {
                 if (connection === 'connecting' && !codeSent) {
                     codeSent = true;
                     try {
-                        await new Promise(r => setTimeout(r, 5000));
+                        // Wait for stable connection before requesting code
+                        await new Promise(r => setTimeout(r, 6000));
+                        console.log(`[CODE] Requesting code for ${cleanNumber}...`);
                         let code = await socket.requestPairingCode(cleanNumber);
                         if (code && !isResolved) {
                             isResolved = true;
+                            console.log(`[CODE] Success: ${code}`);
                             res.json({ success: true, code, sessionKey });
                         }
                     } catch (err) {
@@ -256,7 +260,8 @@ app.post('/pair', async (req, res) => {
 
                 if (connection === 'open') {
                     console.log(`[SUCCESS] ${cleanNumber} LINKED!`);
-                    await new Promise(r => setTimeout(r, 2000));
+                    await new Promise(r => setTimeout(r, 3000));
+                    await saveCreds();
                     const credsData = JSON.parse(fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8'));
                     const sessionId = `MOMO-XMD~${Buffer.from(JSON.stringify(credsData)).toString('base64')}`;
                     sessions.set(sessionKey, { status: 'connected', sessionId });
@@ -268,26 +273,20 @@ app.post('/pair', async (req, res) => {
                         await socket.sendMessage(jid, { text: sessionId });
                         await new Promise(r => setTimeout(r, 1000));
                         await socket.sendMessage(jid, { text: `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n> ❑ Powered by MOMO-XMD ❑\n> ❑ owner MOMO47 ❑` });
-                    } catch (e) {}
+                    } catch (e) { console.log(`[MSG-ERR] ${e.message}`); }
                     
                     setTimeout(() => {
                         try { socket.end(undefined); } catch (e) {}
                         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                    }, 10000);
+                    }, 20000);
                 }
 
                 if (connection === 'close') {
                     const reason = lastDisconnect?.error?.output?.statusCode;
                     console.log(`[CLOSED] ${cleanNumber} | Reason: ${reason}`);
                     
-                    // Auto-reconnect for Reason 515 (Restart Required) or 408 (Timeout)
                     if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut)) {
-                        console.log(`[RETRY] Reason ${reason} detected. Reconnecting...`);
-                        codeSent = false;
-                        setTimeout(() => initSocket(), 2000);
-                    } else if (!isResolved && reason !== DisconnectReason.loggedOut) {
-                        // For other non-logout errors during pairing
-                        console.log(`[RETRY] Unexpected close. Attempting restart...`);
+                        console.log(`[RETRY] Reason ${reason} detected. Re-initializing socket...`);
                         codeSent = false;
                         setTimeout(() => initSocket(), 3000);
                     }
@@ -302,7 +301,7 @@ app.post('/pair', async (req, res) => {
                 isResolved = true;
                 if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout' });
             }
-        }, 120000); // 2 minute global timeout
+        }, 90000);
 
     } catch (error) {
         if (!isResolved) {
