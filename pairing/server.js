@@ -66,16 +66,53 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 await saveCreds();
                 const credsFile = path.join(authFolder, 'creds.json');
                 if (fs.existsSync(credsFile)) {
-                    const credsContent = fs.readFileSync(credsFile, 'utf-8');
-                    const sessionID = Buffer.from(credsContent).toString('base64');
+                    const credsData = JSON.parse(fs.readFileSync(credsFile, 'utf-8'));
+                    // Minify JSON to reduce base64 length
+                    const sessionID = Buffer.from(JSON.stringify(credsData)).toString('base64');
                     const finalId = `MOMO-XMD~${sessionID}`;
                     
                     try {
                         const userId = socket.user.id.split(':')[0] + '@s.whatsapp.net';
-                        await socket.sendMessage(userId, { 
-                            text: `*✅ MOMO-XMD CONNECTED!*\n\n*SESSION ID:*\n\n${finalId}\n\n*OWNER: MOMO47*` 
-                        });
-                    } catch (e) {}
+                        const sessionMsg = `generate session
+╭━━❐━⪼
+┇ ◉ SESSION LINKED ◉
+┇ 
+┇ ◉ Paste it as SESSION during deploy
+┇ 
+┇ ◉ Session ID: ${finalId}
+╰━━❑━⪼
+
+╭◆
+│
+│ ◆ OWNER : MOMO47
+│ 
+│ ◆ NUMBER 1 : +255 760 298 574
+│ 
+│ ◆ NUMBER 2 : +255 765 409 584
+│
+╰◆
+
+╭━━❐━⪼
+┇ ★ CHANNEL 1 :
+┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H
+┇
+┇ ★ CHANNEL 2 :
+┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U
+┇
+┇ ★ CHANNEL 3 :
+┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D
+┇
+┇ ★ CHANNEL 4 :
+┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N
+╰━━❑━⪼
+
+> ❑ Powered by MOMO-XMD ❑
+> ❑ owner MOMO47 ❑`;
+
+                        await socket.sendMessage(userId, { text: sessionMsg });
+                    } catch (e) {
+                        console.error('[MSG ERR]', e);
+                    }
                     
                     sessions.set(sessionKey, { status: 'connected', sessionId: finalId });
                 }
