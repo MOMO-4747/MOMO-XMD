@@ -4,7 +4,8 @@ const {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    DisconnectReason
+    DisconnectReason,
+    Browsers
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const path = require('path');
@@ -12,7 +13,6 @@ const fs = require('fs');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
 const { HttpsProxyAgent } = require('https-proxy-agent');
-const Boom = require('@hapi/boom');
 
 const app = express();
 app.use(express.json());
@@ -126,17 +126,25 @@ const htmlIndex = `<!DOCTYPE html>
             const copyBtn = document.getElementById('copyBtn');
             const textArea = document.createElement("textarea");
             textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
             document.body.appendChild(textArea);
+            textArea.focus();
             textArea.select();
             try {
-                document.execCommand('copy');
-                copyBtn.innerText = 'COPIED!';
-                copyBtn.style.background = '#ffffff';
-                setTimeout(() => {
-                    copyBtn.innerText = 'COPY CODE';
-                    copyBtn.style.background = '#00ffcc';
-                }, 2000);
-            } catch (err) {}
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    copyBtn.innerText = 'COPIED!';
+                    copyBtn.style.background = '#ffffff';
+                    setTimeout(() => {
+                        copyBtn.innerText = 'COPY CODE';
+                        copyBtn.style.background = '#00ffcc';
+                    }, 2000);
+                }
+            } catch (err) {
+                console.error('Copy failed', err);
+            }
             document.body.removeChild(textArea);
         }
         async function pollStatus(key) {
@@ -148,7 +156,7 @@ const htmlIndex = `<!DOCTYPE html>
                     const statusMsg = document.getElementById('status-msg');
                     if (statusMsg) {
                         if (data.error) {
-                            statusMsg.innerHTML = '<span style="color: #ff4444;">Error: ' + data.error + '</span>';
+                            statusMsg.innerHTML = '<span style="color: #ff4444;">' + data.error + '</span>';
                             clearInterval(pollInterval);
                         } else {
                             statusMsg.innerText = "Status: " + (data.status || 'waiting');
@@ -200,7 +208,7 @@ app.post('/pair', async (req, res) => {
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
         const startPairing = async () => {
-            console.log(`[SOCKET] Starting for ${cleanNumber}...`);
+            console.log(`[SOCKET] Initializing for ${cleanNumber}...`);
             socket = makeWASocket({
                 version,
                 auth: {
@@ -209,12 +217,13 @@ app.post('/pair', async (req, res) => {
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: 'fatal' }),
+                // Exact Identity as requested
                 browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
                 markOnlineOnConnect: true,
                 msgRetryCounterCache,
                 connectTimeoutMs: 60000,
                 defaultQueryTimeoutMs: 60000,
-                keepAliveIntervalMs: 10000,
+                keepAliveIntervalMs: 20000,
                 agent
             });
 
@@ -241,32 +250,30 @@ app.post('/pair', async (req, res) => {
                         await socket.sendMessage(jid, { text: `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n> ❑ Powered by MOMO-XMD ❑\n> ❑ owner MOMO47 ❑` });
                     } catch (e) {}
                     
+                    // Keep session alive for 5 minutes before cleanup
                     setTimeout(() => {
                         try { socket.end(undefined); } catch (e) {}
                         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                    }, 15000);
+                    }, 300000);
                 }
 
                 if (connection === 'close') {
                     const reason = lastDisconnect?.error?.output?.statusCode;
-                    const errorMsg = lastDisconnect?.error?.message || 'Disconnected';
-                    console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason} | Error: ${errorMsg}`);
+                    console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason}`);
                     
                     if (reason === 403) {
-                        sessions.set(sessionKey, { ...sessions.get(sessionKey), status: 'failed', error: 'Forbidden (403) - Number might be blocked or IP flagged.' });
-                    } else if (reason === 401) {
-                        sessions.set(sessionKey, { ...sessions.get(sessionKey), status: 'failed', error: 'Unauthorized (401) - Please refresh and try again.' });
+                        sessions.set(sessionKey, { ...sessions.get(sessionKey), status: 'failed', error: 'Forbidden (403) - IP or Number flagged.' });
                     }
 
                     if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired)) {
-                        console.log(`[RETRY] Reconnecting for ${cleanNumber}...`);
-                        setTimeout(() => startPairing(), 2000);
+                        console.log(`[RETRY] Auto-reconnecting for ${cleanNumber}...`);
+                        setTimeout(() => startPairing(), 3000);
                     }
                 }
             });
 
-            // Wait for socket to stabilize
-            await new Promise(r => setTimeout(r, 8000));
+            // Stabilize socket before code request
+            await new Promise(r => setTimeout(r, 10000));
             if (!isResolved) {
                 try {
                     let code = await socket.requestPairingCode(cleanNumber);
@@ -278,9 +285,7 @@ app.post('/pair', async (req, res) => {
                     console.log(`[CODE-ERR] ${err.message}`);
                     if (!isResolved) {
                         isResolved = true;
-                        let msg = 'WhatsApp rejected request.';
-                        if (err.message.includes('403')) msg = 'Namba hii imezuiliwa na WhatsApp (403).';
-                        res.status(500).json({ success: false, message: msg });
+                        res.status(500).json({ success: false, message: 'WhatsApp rejected request. Try again.' });
                     }
                 }
             }
@@ -288,17 +293,18 @@ app.post('/pair', async (req, res) => {
 
         await startPairing();
 
+        // 3 minute timeout for the pairing request
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
-                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Refresh page.' });
+                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Refresh and try again.' });
             }
-        }, 120000);
+        }, 180000);
 
     } catch (error) {
         if (!isResolved) {
             isResolved = true;
-            if (!res.headersSent) res.status(500).json({ success: false, message: 'Server Error' });
+            if (!res.headersSent) res.status(500).json({ success: false, message: 'Server error' });
         }
     } finally {
         release();
