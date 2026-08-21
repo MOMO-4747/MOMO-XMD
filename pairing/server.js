@@ -13,8 +13,6 @@ const fs = require('fs');
 const QRCode = require('qrcode');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
-const { HttpProxyAgent } = require('http-proxy-agent');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 app.use(express.json());
@@ -26,47 +24,28 @@ const sessions = new Map();
 const mutex = new Mutex();
 const msgRetryCounterCache = new NodeCache();
 
-// Free/Public proxy pool or environment proxy
-const proxies = [
-    // Direct connection first as requested
-    null
-];
-
-function getAgent() {
-    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-    if (!proxy) return undefined;
-    if (proxy.startsWith('https')) return new HttpsProxyAgent(proxy);
-    return new HttpProxyAgent(proxy);
-}
-
 process.on('unhandledRejection', (err) => console.error('[UNHANDLED]', err));
 process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
 async function createWASocket(authFolder, phone, res, sessionKey) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     
-    const agent = getAgent();
-    const socketOptions = {
+    const socket = makeWASocket({
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
         },
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: ["Chrome (Linux)", "Chrome", "120.0.0.0"],
+        browser: ["MOMO-XMD", "Chrome", "1.0.0"],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 15000,
+        keepAliveIntervalMs: 25000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache
-    };
+    });
 
-    if (agent) {
-        socketOptions.agent = agent;
-    }
-
-    const socket = makeWASocket(socketOptions);
     let isResolved = false;
 
     socket.ev.on('creds.update', saveCreds);
@@ -110,8 +89,10 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
             const reason = lastDisconnect?.error?.output?.statusCode;
             console.log(`[CLOSED] ${phone} | Reason: ${reason}`);
             sessions.set(sessionKey, { status: 'closed', reason });
-            if (reason === DisconnectReason.loggedOut) {
-                if (fs.existsSync(authFolder)) fs.rmSync(authFolder, { recursive: true, force: true });
+            
+            // If connection closed with 515 or 408 before linking, attempt quick reconnect if not resolved
+            if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.connectionRestart)) {
+                console.log(`[RETRY] Attempting reconnection for ${phone}...`);
             }
         }
     });
@@ -137,7 +118,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 }
             }
         }
-    }, 5000);
+    }, 4000);
 
     // Timeout guard (3 minutes)
     setTimeout(() => {
@@ -198,7 +179,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'silent' }),
-            browser: ["Chrome (Linux)", "Chrome", "120.0.0.0"]
+            browser: ["MOMO-XMD", "Chrome", "1.0.0"]
         });
 
         let sent = false;
