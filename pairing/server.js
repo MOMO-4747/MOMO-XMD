@@ -120,7 +120,7 @@ const htmlIndex = `<!DOCTYPE html>
             const phone = document.getElementById('phone').value.trim();
             const resultDiv = document.getElementById('result');
             if (!phone) { alert('Tafadhali jaza namba ya simu!'); return; }
-            resultDiv.innerHTML = '<p style="color: #ffff00; font-family: monospace; animation: blink 1s infinite;">⚡ Securing Connection & Generating Code...</p>';
+            resultDiv.innerHTML = '<p style="color: #ffff00; font-family: monospace; animation: blink 1s infinite;">⚡ Generating Code...</p>';
             
             try {
                 const res = await fetch('/pair', {
@@ -134,7 +134,6 @@ const htmlIndex = `<!DOCTYPE html>
                         <p style="color: #00ffcc; font-weight: bold;">Pairing Code Ready!</p>
                         <div class="code-box" id="codeText">\${data.code}</div>
                         <button class="copy-btn" onclick="copyCode()">COPY CODE</button>
-                        <p id="status-msg" style="font-size: 12px; color: #88ccff; margin-top: 10px;">Waiting for link...</p>
                     \`;
                     pollStatus(data.sessionKey);
                 } else {
@@ -155,10 +154,8 @@ const htmlIndex = `<!DOCTYPE html>
                 try {
                     const res = await fetch('/session-status/' + key);
                     const data = await res.json();
-                    const statusMsg = document.getElementById('status-msg');
-                    if (statusMsg) statusMsg.innerText = "Status: " + (data.status || 'waiting');
                     if (data.status === 'connected' || data.sessionReady) {
-                        document.getElementById('result').innerHTML = '<p style="color: #00ff00; font-weight: bold; font-size: 24px;">✔ LINKED SUCCESSFULLY!<br><span style="font-size: 14px;">Check your WhatsApp for the Session ID.</span></p>';
+                        document.getElementById('result').innerHTML = '<p style="color: #00ff00; font-weight: bold; font-size: 24px;">✔ LINKED SUCCESSFULLY!</p>';
                         clearInterval(pollInterval);
                     }
                 } catch (e) {}
@@ -208,7 +205,7 @@ app.post('/pair', async (req, res) => {
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
         async function initSocket() {
-            console.log(`[SOCKET] Initializing for ${cleanNumber} with Safari Mac OS Identity...`);
+            console.log(`[SOCKET] Initializing for ${cleanNumber}...`);
             socket = makeWASocket({
                 version,
                 auth: {
@@ -217,13 +214,13 @@ app.post('/pair', async (req, res) => {
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: 'fatal' }),
-                // Exact Browser Identity requested by user
+                // Exact Browser Identity: Safari (Mac OS)
                 browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
                 markOnlineOnConnect: true,
                 msgRetryCounterCache,
                 connectTimeoutMs: 60000,
                 defaultQueryTimeoutMs: 60000,
-                keepAliveIntervalMs: 15000,
+                keepAliveIntervalMs: 10000,
                 generateHighQualityThumbnail: true,
                 agent
             });
@@ -240,28 +237,24 @@ app.post('/pair', async (req, res) => {
                 if (connection === 'connecting' && !codeSent) {
                     codeSent = true;
                     try {
-                        // Wait for stable connection before requesting code
-                        await new Promise(r => setTimeout(r, 6000));
-                        console.log(`[CODE] Requesting code for ${cleanNumber}...`);
+                        await new Promise(r => setTimeout(r, 4000));
                         let code = await socket.requestPairingCode(cleanNumber);
                         if (code && !isResolved) {
                             isResolved = true;
-                            console.log(`[CODE] Success: ${code}`);
                             res.json({ success: true, code, sessionKey });
                         }
                     } catch (err) {
                         console.log(`[CODE-ERR] ${err.message}`);
                         if (!isResolved) {
                             isResolved = true;
-                            res.status(500).json({ success: false, message: 'WhatsApp rejected code request. Try again.' });
+                            res.status(500).json({ success: false, message: 'Try again.' });
                         }
                     }
                 }
 
                 if (connection === 'open') {
                     console.log(`[SUCCESS] ${cleanNumber} LINKED!`);
-                    await new Promise(r => setTimeout(r, 3000));
-                    await saveCreds();
+                    await new Promise(r => setTimeout(r, 2000));
                     const credsData = JSON.parse(fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8'));
                     const sessionId = `MOMO-XMD~${Buffer.from(JSON.stringify(credsData)).toString('base64')}`;
                     sessions.set(sessionKey, { status: 'connected', sessionId });
@@ -273,22 +266,20 @@ app.post('/pair', async (req, res) => {
                         await socket.sendMessage(jid, { text: sessionId });
                         await new Promise(r => setTimeout(r, 1000));
                         await socket.sendMessage(jid, { text: `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n> ❑ Powered by MOMO-XMD ❑\n> ❑ owner MOMO47 ❑` });
-                    } catch (e) { console.log(`[MSG-ERR] ${e.message}`); }
+                    } catch (e) {}
                     
                     setTimeout(() => {
                         try { socket.end(undefined); } catch (e) {}
                         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                    }, 20000);
+                    }, 10000);
                 }
 
                 if (connection === 'close') {
                     const reason = lastDisconnect?.error?.output?.statusCode;
-                    console.log(`[CLOSED] ${cleanNumber} | Reason: ${reason}`);
-                    
                     if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut)) {
-                        console.log(`[RETRY] Reason ${reason} detected. Re-initializing socket...`);
+                        console.log(`[RETRY] Reconnecting...`);
                         codeSent = false;
-                        setTimeout(() => initSocket(), 3000);
+                        setTimeout(() => initSocket(), 2000);
                     }
                 }
             });
@@ -301,7 +292,7 @@ app.post('/pair', async (req, res) => {
                 isResolved = true;
                 if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout' });
             }
-        }, 90000);
+        }, 120000);
 
     } catch (error) {
         if (!isResolved) {
