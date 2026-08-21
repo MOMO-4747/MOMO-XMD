@@ -12,6 +12,8 @@ const fs = require('fs');
 const QRCode = require('qrcode');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
+const { HttpProxyAgent } = require('http-proxy-agent');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 app.use(express.json());
@@ -23,14 +25,30 @@ const sessions = new Map();
 const mutex = new Mutex();
 const msgRetryCounterCache = new NodeCache();
 
+// Webshare / Free Proxy Pool rotation to bypass IP blocks
+const proxyPool = [
+    // Add custom proxies if available, otherwise use direct fallback with agent support
+    process.env.PROXY_URL || null
+].filter(Boolean);
+
+function getProxyAgent() {
+    if (proxyPool.length === 0) return undefined;
+    const proxy = proxyPool[Math.floor(Math.random() * proxyPool.length)];
+    console.log(`[PROXY] Using proxy: ${proxy}`);
+    return {
+        http: new HttpProxyAgent(proxy),
+        https: new HttpsProxyAgent(proxy)
+    };
+}
+
 process.on('unhandledRejection', (err) => console.error('[UNHANDLED]', err));
 process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 
 async function createWASocket(authFolder, phone, res, sessionKey) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     
-    // Exact match for "Safari (Mac OS)"
-    const socket = makeWASocket({
+    const proxies = getProxyAgent();
+    const socketConfig = {
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
@@ -44,8 +62,13 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache
-    });
+    };
 
+    if (proxies) {
+        socketConfig.agent = proxies.https;
+    }
+
+    const socket = makeWASocket(socketConfig);
     let isResolved = false;
 
     socket.ev.on('creds.update', saveCreds);
@@ -199,8 +222,4 @@ app.get('/qr', async (req, res) => {
     } catch (e) { if (!res.headersSent) res.status(500).json({ error: e.message }); }
 });
 
-if (require.main === module) {
-    app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));
-}
-
-module.exports = app;
+app.listen(PORT, () => console.log(`MOMO-XMD Server running on port ${PORT}`));
