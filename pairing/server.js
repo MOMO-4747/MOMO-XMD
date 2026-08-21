@@ -29,7 +29,7 @@ process.on('uncaughtException', (err) => console.error('[UNCAUGHT]', err));
 async function createWASocket(authFolder, phone, res, sessionKey) {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     
-    // Exact match for the user's screenshot identity "Safari (Mac OS)"
+    // Exact match for "Safari (Mac OS)"
     const socket = makeWASocket({
         auth: {
             creds: state.creds,
@@ -37,10 +37,10 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
+        browser: ["Mac OS", "Safari", "17.4.1"],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 25000,
+        keepAliveIntervalMs: 15000,
         markOnlineOnConnect: true,
         syncFullHistory: false,
         msgRetryCounterCache
@@ -101,7 +101,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
             try {
                 if (!socket.authState.creds.registered) {
                     console.log(`[SOCKET] Requesting pairing code for ${phone}...`);
-                    await delay(2000);
+                    await delay(3000);
                     const code = await socket.requestPairingCode(phone);
                     console.log(`[CODE] ${phone}: ${code}`);
                     if (!isResolved) {
@@ -116,7 +116,7 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                 }
             }
         }
-    }, 4000);
+    }, 5000);
 
     // Timeout guard (3 minutes)
     setTimeout(() => {
@@ -177,7 +177,7 @@ app.get('/qr', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: 'silent' }),
-            browser: ["Safari (Mac OS)", "Safari", "17.4.1"]
+            browser: ["Mac OS", "Safari", "17.4.1"]
         });
 
         let sent = false;
