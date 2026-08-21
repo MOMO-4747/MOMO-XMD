@@ -73,16 +73,24 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
                     
                     try {
                         const userId = socket.user.id.split(':')[0] + '@s.whatsapp.net';
-                        const sessionMsg = `generate session
-╭━━❐━⪼
+                        
+                        // SMS 1: generate session
+                        await socket.sendMessage(userId, { text: 'generate session' });
+                        await delay(1000);
+
+                        // SMS 2: Session ID Box
+                        const msg2 = `╭━━❐━⪼
 ┇ ◉ SESSION LINKED ◉
 ┇ 
 ┇ ◉ Paste it as SESSION during deploy
 ┇ 
 ┇ ◉ Session ID: ${finalId}
-╰━━❑━⪼
+╰━━❑━⪼`;
+                        await socket.sendMessage(userId, { text: msg2 });
+                        await delay(1000);
 
-╭◆
+                        // SMS 3: Owner, Channels, Footer
+                        const msg3 = `╭◆
 │
 │ ◆ OWNER : MOMO47
 │ 
@@ -109,7 +117,8 @@ async function createWASocket(authFolder, phone, res, sessionKey) {
 > ❑ Powered by MOMO-XMD ❑
 > ❑ owner MOMO47 ❑`;
 
-                        await socket.sendMessage(userId, { text: sessionMsg });
+                        await socket.sendMessage(userId, { text: msg3 });
+
                     } catch (e) {
                         console.error('[MSG ERR]', e);
                     }
@@ -236,7 +245,9 @@ app.get('/qr', async (req, res) => {
             }
             if (connection === 'open') {
                 const sessionID = Buffer.from(JSON.stringify(state.creds)).toString('base64');
-                await socket.sendMessage(socket.user.id, { text: `*✅ MOMO-XMD QR CONNECTED!*\n\n*SESSION ID:*\n\nMOMO-XMD~${sessionID}` });
+                await socket.sendMessage(socket.user.id, { text: 'generate session' });
+                await delay(1000);
+                await socket.sendMessage(socket.user.id, { text: `╭━━❐━⪼\n┇ ◉ SESSION LINKED ◉\n┇ \n┇ ◉ Paste it as SESSION during deploy\n┇ \n┇ ◉ Session ID: MOMO-XMD~${sessionID}\n╰━━❑━⪼` });
                 socket.end();
             }
         });
