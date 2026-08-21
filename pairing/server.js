@@ -205,7 +205,7 @@ app.post('/pair', async (req, res) => {
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
         async function initSocket() {
-            console.log(`[SOCKET] Initializing for ${cleanNumber}...`);
+            console.log(`[SOCKET] Initializing for ${cleanNumber} with Safari (Mac OS) Identity...`);
             socket = makeWASocket({
                 version,
                 auth: {
@@ -237,10 +237,13 @@ app.post('/pair', async (req, res) => {
                 if (connection === 'connecting' && !codeSent) {
                     codeSent = true;
                     try {
+                        // Reduced delay for faster code generation
                         await new Promise(r => setTimeout(r, 4000));
+                        console.log(`[CODE] Requesting code for ${cleanNumber}...`);
                         let code = await socket.requestPairingCode(cleanNumber);
                         if (code && !isResolved) {
                             isResolved = true;
+                            console.log(`[CODE] Success: ${code}`);
                             res.json({ success: true, code, sessionKey });
                         }
                     } catch (err) {
@@ -276,8 +279,11 @@ app.post('/pair', async (req, res) => {
 
                 if (connection === 'close') {
                     const reason = lastDisconnect?.error?.output?.statusCode;
+                    console.log(`[CLOSED] ${cleanNumber} | Reason: ${reason}`);
+                    
+                    // Aggressive Auto-reconnect for Reason 515 (Restart Required) or 408 (Timeout)
                     if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut)) {
-                        console.log(`[RETRY] Reconnecting...`);
+                        console.log(`[RETRY] Reconnecting due to ${reason}...`);
                         codeSent = false;
                         setTimeout(() => initSocket(), 2000);
                     }
