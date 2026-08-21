@@ -22,10 +22,8 @@ if (!fs.existsSync(publicPath)) {
     fs.mkdirSync(publicPath, { recursive: true });
 }
 
-// User provided Blue Skull Logo
 const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
 
-// UI Implementation
 const htmlIndex = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,37 +33,19 @@ const htmlIndex = `<!DOCTYPE html>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Courier+Prime&display=swap" rel="stylesheet">
     <style>
         body {
-            background-color: #030712;
-            color: #00ffff;
-            font-family: 'Orbitron', sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
+            background-color: #030712; color: #00ffff; font-family: 'Orbitron', sans-serif;
+            margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; min-height: 100vh;
             background-image: radial-gradient(circle at center, #0a192f 0%, #030712 100%);
         }
         .container {
-            background: rgba(3, 7, 18, 0.95);
-            border: 2px solid #00ffff;
-            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
-            border-radius: 20px;
-            padding: 40px;
-            max-width: 480px;
-            width: 90%;
-            text-align: center;
-            backdrop-filter: blur(10px);
+            background: rgba(3, 7, 18, 0.95); border: 2px solid #00ffff;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3); border-radius: 20px;
+            padding: 40px; max-width: 480px; width: 90%; text-align: center; backdrop-filter: blur(10px);
         }
         .skull-logo {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            border: 3px solid #00ffff;
-            box-shadow: 0 0 25px #00ffff;
-            object-fit: cover;
-            margin-bottom: 20px;
+            width: 150px; height: 150px; border-radius: 50%; border: 3px solid #00ffff;
+            box-shadow: 0 0 25px #00ffff; object-fit: cover; margin-bottom: 20px;
             animation: pulse 2.5s infinite ease-in-out;
         }
         @keyframes pulse {
@@ -111,16 +91,13 @@ const htmlIndex = `<!DOCTYPE html>
             &gt; owner MOMO47
         </div>
     </div>
-    <audio id="bgm" loop autoplay>
-        <source src="https://assets.mixkit.co/music/preview/mixkit-cyber-punk-cat-245.mp3" type="audio/mp3">
-    </audio>
     <script>
         let pollInterval;
         async function getPairingCode() {
             const phone = document.getElementById('phone').value.trim();
             const resultDiv = document.getElementById('result');
             if (!phone) { alert('Tafadhali jaza namba ya simu!'); return; }
-            resultDiv.innerHTML = '<p style="color: #ffff00; font-family: monospace; animation: blink 1s infinite;">⚡ Generating Code...</p>';
+            resultDiv.innerHTML = '<p style="color: #ffff00; font-family: monospace; animation: blink 1s infinite;">⚡ Securing Connection...</p>';
             
             try {
                 const res = await fetch('/pair', {
@@ -137,10 +114,10 @@ const htmlIndex = `<!DOCTYPE html>
                     \`;
                     pollStatus(data.sessionKey);
                 } else {
-                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.message || data.error || 'Failed'}</p>\`;
+                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.message || 'Failed. Try again.'}</p>\`;
                 }
             } catch (err) {
-                resultDiv.innerHTML = \`<p style="color: #ff4444;">Network error: \${err.message}</p>\`;
+                resultDiv.innerHTML = \`<p style="color: #ff4444;">Network error.</p>\`;
             }
         }
         function copyCode() {
@@ -154,7 +131,7 @@ const htmlIndex = `<!DOCTYPE html>
                 try {
                     const res = await fetch('/session-status/' + key);
                     const data = await res.json();
-                    if (data.status === 'connected' || data.sessionReady) {
+                    if (data.status === 'connected') {
                         document.getElementById('result').innerHTML = '<p style="color: #00ff00; font-weight: bold; font-size: 24px;">✔ LINKED SUCCESSFULLY!</p>';
                         clearInterval(pollInterval);
                     }
@@ -166,7 +143,6 @@ const htmlIndex = `<!DOCTYPE html>
 </html>`;
 
 fs.writeFileSync(path.join(publicPath, 'index.html'), htmlIndex);
-
 app.use(express.static(publicPath));
 app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
 
@@ -178,34 +154,29 @@ const PROXY_URL = process.env.PROXY_URL || null;
 
 app.get('/session-status/:key', (req, res) => {
     const session = sessions.get(req.params.key);
-    if (!session) return res.json({ status: 'waiting' });
-    res.json({ status: session.status, sessionReady: !!session.sessionId });
+    res.json({ status: session?.status || 'waiting' });
 });
 
 app.post('/pair', async (req, res) => {
     let { number } = req.body;
-    if (!number) return res.status(400).json({ success: false, message: 'Namba inahitajika' });
+    if (!number) return res.status(400).json({ success: false });
     let cleanNumber = String(number).replace(/[^0-9]/g, '');
     
     const release = await mutex.acquire();
     const sessionKey = 'momo_' + Date.now();
-    sessions.set(sessionKey, { status: 'starting', timestamp: Date.now() });
+    sessions.set(sessionKey, { status: 'starting' });
 
     let authDir = path.join(__dirname, 'auth_' + Date.now());
     let isResolved = false;
-    let codeSent = false;
     let socket;
 
     try {
-        if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-        fs.mkdirSync(authDir, { recursive: true });
-
+        if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
         const { state, saveCreds } = await useMultiFileAuthState(authDir);
         const { version } = await fetchLatestBaileysVersion();
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
-        async function initSocket() {
-            console.log(`[SOCKET] Initializing for ${cleanNumber} with Safari (Mac OS) Identity...`);
+        const startPairing = async () => {
             socket = makeWASocket({
                 version,
                 auth: {
@@ -214,14 +185,12 @@ app.post('/pair', async (req, res) => {
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: 'fatal' }),
-                // Exact Browser Identity: Safari (Mac OS)
                 browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
                 markOnlineOnConnect: true,
                 msgRetryCounterCache,
                 connectTimeoutMs: 60000,
                 defaultQueryTimeoutMs: 60000,
                 keepAliveIntervalMs: 10000,
-                generateHighQualityThumbnail: true,
                 agent
             });
 
@@ -229,35 +198,12 @@ app.post('/pair', async (req, res) => {
 
             socket.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect } = update;
-                if (connection) {
-                    console.log(`[STATE] ${cleanNumber} -> ${connection}`);
-                    sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection });
-                }
-
-                if (connection === 'connecting' && !codeSent) {
-                    codeSent = true;
-                    try {
-                        // Reduced delay for faster code generation
-                        await new Promise(r => setTimeout(r, 4000));
-                        console.log(`[CODE] Requesting code for ${cleanNumber}...`);
-                        let code = await socket.requestPairingCode(cleanNumber);
-                        if (code && !isResolved) {
-                            isResolved = true;
-                            console.log(`[CODE] Success: ${code}`);
-                            res.json({ success: true, code, sessionKey });
-                        }
-                    } catch (err) {
-                        console.log(`[CODE-ERR] ${err.message}`);
-                        if (!isResolved) {
-                            isResolved = true;
-                            res.status(500).json({ success: false, message: 'Try again.' });
-                        }
-                    }
+                if (connection === 'connecting') {
+                    sessions.set(sessionKey, { status: 'connecting' });
                 }
 
                 if (connection === 'open') {
-                    console.log(`[SUCCESS] ${cleanNumber} LINKED!`);
-                    await new Promise(r => setTimeout(r, 2000));
+                    console.log(`[SUCCESS] ${cleanNumber} Linked!`);
                     const credsData = JSON.parse(fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8'));
                     const sessionId = `MOMO-XMD~${Buffer.from(JSON.stringify(credsData)).toString('base64')}`;
                     sessions.set(sessionKey, { status: 'connected', sessionId });
@@ -272,38 +218,54 @@ app.post('/pair', async (req, res) => {
                     } catch (e) {}
                     
                     setTimeout(() => {
-                        try { socket.end(undefined); } catch (e) {}
+                        socket.end(undefined);
                         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                    }, 10000);
+                    }, 15000);
                 }
 
                 if (connection === 'close') {
                     const reason = lastDisconnect?.error?.output?.statusCode;
-                    console.log(`[CLOSED] ${cleanNumber} | Reason: ${reason}`);
+                    console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason}`);
                     
-                    // Aggressive Auto-reconnect for Reason 515 (Restart Required) or 408 (Timeout)
-                    if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut)) {
-                        console.log(`[RETRY] Reconnecting due to ${reason}...`);
-                        codeSent = false;
-                        setTimeout(() => initSocket(), 2000);
+                    if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired)) {
+                        console.log(`[RETRY] Reconnecting for ${cleanNumber}...`);
+                        setTimeout(() => startPairing(), 2000);
                     }
                 }
             });
-        }
 
-        await initSocket();
+            // Delay pairing code request to ensure socket stability
+            await new Promise(r => setTimeout(r, 8000));
+            if (!isResolved) {
+                try {
+                    let code = await socket.requestPairingCode(cleanNumber);
+                    if (code && !isResolved) {
+                        isResolved = true;
+                        res.json({ success: true, code, sessionKey });
+                    }
+                } catch (err) {
+                    console.log(`[CODE-ERR] ${err.message}`);
+                    if (!isResolved) {
+                        isResolved = true;
+                        res.status(500).json({ success: false, message: 'WhatsApp rejected request.' });
+                    }
+                }
+            }
+        };
+
+        await startPairing();
 
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
                 if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout' });
             }
-        }, 120000);
+        }, 100000);
 
     } catch (error) {
         if (!isResolved) {
             isResolved = true;
-            if (!res.headersSent) res.status(500).json({ success: false, message: error.message });
+            if (!res.headersSent) res.status(500).json({ success: false });
         }
     } finally {
         release();
