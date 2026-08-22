@@ -19,15 +19,23 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const publicPath = path.join(__dirname, 'public');
 const registryPath = path.join(__dirname, '..', 'session-registry');
-
-if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
 if (!fs.existsSync(registryPath)) fs.mkdirSync(registryPath, { recursive: true });
 
 const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
 
-const htmlIndex = `<!DOCTYPE html>
+// Serve BGM with proper headers to avoid RangeNotSatisfiableError
+app.get('/bgm.mp3', (req, res) => {
+    const bgmPath = path.join(__dirname, 'public', 'bgm.mp3');
+    if (fs.existsSync(bgmPath)) {
+        res.sendFile(bgmPath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/', (req, res) => {
+    const htmlIndex = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -133,16 +141,6 @@ const htmlIndex = `<!DOCTYPE html>
         
         function copyCode(text) {
             const copyBtn = document.getElementById('copyBtn');
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(() => {
-                    showCopied(copyBtn);
-                }).catch(() => fallbackCopy(text, copyBtn));
-            } else {
-                fallbackCopy(text, copyBtn);
-            }
-        }
-
-        function fallbackCopy(text, btn) {
             const textArea = document.createElement("textarea");
             textArea.value = text;
             textArea.style.position = "fixed";
@@ -153,18 +151,17 @@ const htmlIndex = `<!DOCTYPE html>
             textArea.select();
             try {
                 document.execCommand('copy');
-                showCopied(btn);
+                showCopied(copyBtn);
             } catch (err) {}
             document.body.removeChild(textArea);
         }
 
         function showCopied(btn) {
             if (!btn) return;
-            const originalText = btn.innerText;
             btn.innerText = 'COPIED!';
             btn.style.background = '#ffffff';
             setTimeout(() => {
-                btn.innerText = originalText;
+                btn.innerText = 'COPY CODE';
                 btn.style.background = '#00ffcc';
             }, 2000);
         }
@@ -194,9 +191,8 @@ const htmlIndex = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
-
-fs.writeFileSync(path.join(publicPath, 'index.html'), htmlIndex);
-app.use(express.static(publicPath));
+    res.send(htmlIndex);
+});
 
 // Registry Endpoint
 app.get('/session-registry/:id', (req, res) => {
@@ -228,12 +224,10 @@ app.post('/pair', async (req, res) => {
     const sessionKey = 'momo_' + Date.now();
     sessions.set(sessionKey, { status: 'starting' });
 
-    // Use persistent auth dir per number to handle 515 correctly
     let authDir = path.join('/tmp', 'momo_auth_' + cleanNumber);
     let isResolved = false;
     let socket;
 
-    // Cleanup old auth dir for this number to ensure fresh start
     if (fs.existsSync(authDir)) {
         try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
     }
@@ -247,7 +241,6 @@ app.post('/pair', async (req, res) => {
         const startPairing = async () => {
             const release = await mutex.acquire();
             try {
-                console.log(`[SOCKET] Starting for ${cleanNumber} using Safari Mac OS...`);
                 socket = makeWASocket({
                     version,
                     auth: {
@@ -259,9 +252,9 @@ app.post('/pair', async (req, res) => {
                     browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
                     markOnlineOnConnect: true,
                     msgRetryCounterCache,
-                    connectTimeoutMs: 60000,
-                    defaultQueryTimeoutMs: 60000,
-                    keepAliveIntervalMs: 15000,
+                    connectTimeoutMs: 120000,
+                    defaultQueryTimeoutMs: 120000,
+                    keepAliveIntervalMs: 20000,
                     agent
                 });
 
@@ -304,7 +297,8 @@ app.post('/pair', async (req, res) => {
                         console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason}`);
                         
                         if (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired) {
-                            console.log(`[RESTART] Restarting socket for ${cleanNumber}...`);
+                            // Silently reconnect without generating new code if already generated
+                            console.log(`[RESTART] Silently reconnecting for ${cleanNumber}...`);
                             setTimeout(() => startPairing(), 2000);
                         } else if (reason === DisconnectReason.loggedOut) {
                             sessions.set(sessionKey, { status: 'closed', error: 'Logged out' });
@@ -312,10 +306,9 @@ app.post('/pair', async (req, res) => {
                     }
                 });
 
-                // Wait for connection to stabilize
-                await new Promise(r => setTimeout(r, 12000));
-
+                // Wait for connection to stabilize before requesting code
                 if (!isResolved) {
+                    await new Promise(r => setTimeout(r, 15000));
                     try {
                         let code = await socket.requestPairingCode(cleanNumber);
                         if (code && !isResolved) {
@@ -337,13 +330,12 @@ app.post('/pair', async (req, res) => {
 
         await startPairing();
 
-        // Safety timeout for the HTTP request
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
                 if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Jaribu tena.' });
             }
-        }, 60000);
+        }, 90000);
 
     } catch (error) {
         console.error(`[CRITICAL] ${error.message}`);
@@ -354,4 +346,13 @@ app.post('/pair', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+// Prevent crashes from unhandled errors
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+app.listen(PORT, () => console.log(`[MOMO-XMD PAIRING] Server running on port ${PORT}`));
