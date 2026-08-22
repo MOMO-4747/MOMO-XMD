@@ -3,7 +3,6 @@ const {
     default: makeWASocket,
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore,
     DisconnectReason,
     Browsers
 } = require('@whiskeysockets/baileys');
@@ -112,7 +111,7 @@ const htmlIndex = `<!DOCTYPE html>
                         <p style="color: #00ffcc; font-weight: bold;">Pairing Code Ready!</p>
                         <div class="code-box" id="codeText">\${data.code}</div>
                         <button class="copy-btn" id="copyBtn" onclick="copyCode('\${data.code}')">COPY CODE</button>
-                        <p id="status-msg" style="font-size: 12px; color: #88ccff; margin-top: 10px;">Waiting for link...</p>
+                        <p id="status-msg" style="font-size: 12px; color: #88ccff; margin-top: 10px;">Status: code generated</p>
                     \`;
                     pollStatus(data.sessionKey);
                 } else {
@@ -142,9 +141,7 @@ const htmlIndex = `<!DOCTYPE html>
                         copyBtn.style.background = '#00ffcc';
                     }, 2000);
                 }
-            } catch (err) {
-                console.error('Copy failed', err);
-            }
+            } catch (err) {}
             document.body.removeChild(textArea);
         }
         async function pollStatus(key) {
@@ -208,22 +205,22 @@ app.post('/pair', async (req, res) => {
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
         const startPairing = async () => {
-            console.log(`[SOCKET] Initializing for ${cleanNumber}...`);
+            console.log(`[SOCKET] Starting ultra-stable session for ${cleanNumber}...`);
             socket = makeWASocket({
                 version,
                 auth: {
                     creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
+                    keys: state.keys // Removed cacheable wrapper for pairing stability
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: 'fatal' }),
-                // Exact Identity as requested
-                browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
+                // Official Safari Mac OS Identity
+                browser: Browsers.macOS('Safari'),
                 markOnlineOnConnect: true,
                 msgRetryCounterCache,
-                connectTimeoutMs: 60000,
-                defaultQueryTimeoutMs: 60000,
-                keepAliveIntervalMs: 20000,
+                connectTimeoutMs: 120000,
+                defaultQueryTimeoutMs: 120000,
+                keepAliveIntervalMs: 10000,
                 agent
             });
 
@@ -250,7 +247,6 @@ app.post('/pair', async (req, res) => {
                         await socket.sendMessage(jid, { text: `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n> ❑ Powered by MOMO-XMD ❑\n> ❑ owner MOMO47 ❑` });
                     } catch (e) {}
                     
-                    // Keep session alive for 5 minutes before cleanup
                     setTimeout(() => {
                         try { socket.end(undefined); } catch (e) {}
                         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
@@ -272,8 +268,17 @@ app.post('/pair', async (req, res) => {
                 }
             });
 
-            // Stabilize socket before code request
-            await new Promise(r => setTimeout(r, 10000));
+            // Heartbeat to keep socket active
+            const heartbeat = setInterval(() => {
+                if (socket && socket.ws && socket.ws.readyState === 1) {
+                    socket.query({ tag: 'iq', attrs: { type: 'get', xmlns: 'w:p', to: '@s.whatsapp.net' }, content: [] }).catch(() => {});
+                } else {
+                    clearInterval(heartbeat);
+                }
+            }, 15000);
+
+            // Wait for socket to stabilize
+            await new Promise(r => setTimeout(r, 12000));
             if (!isResolved) {
                 try {
                     let code = await socket.requestPairingCode(cleanNumber);
@@ -285,7 +290,7 @@ app.post('/pair', async (req, res) => {
                     console.log(`[CODE-ERR] ${err.message}`);
                     if (!isResolved) {
                         isResolved = true;
-                        res.status(500).json({ success: false, message: 'WhatsApp rejected request. Try again.' });
+                        res.status(500).json({ success: false, message: 'WhatsApp rejected request. Refresh and try again.' });
                     }
                 }
             }
@@ -293,11 +298,10 @@ app.post('/pair', async (req, res) => {
 
         await startPairing();
 
-        // 3 minute timeout for the pairing request
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
-                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Refresh and try again.' });
+                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Refresh and try tena.' });
             }
         }, 180000);
 
