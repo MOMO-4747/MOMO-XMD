@@ -17,6 +17,7 @@ const crypto = require('crypto');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const registryPath = path.join(__dirname, '..', 'session-registry');
 if (!fs.existsSync(registryPath)) fs.mkdirSync(registryPath, { recursive: true });
