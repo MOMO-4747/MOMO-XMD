@@ -307,11 +307,33 @@
             if (on) document.getElementById('result').style.display = 'none';
         }
 
-        function copyCode() {
+        async function copyCode() {
             const code = document.getElementById('pairing-code').innerText;
             if (code === '--------') return;
-            navigator.clipboard.writeText(code);
-            showNotification('CODE COPIED!');
+            let copied = false;
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(code);
+                    copied = true;
+                }
+            } catch (e) {}
+            if (!copied) {
+                const area = document.createElement('textarea');
+                area.value = code;
+                area.setAttribute('readonly', '');
+                area.style.position = 'fixed';
+                area.style.left = '-9999px';
+                document.body.appendChild(area);
+                area.select();
+                try { copied = document.execCommand('copy'); } catch (e) {}
+                area.remove();
+            }
+            const button = document.querySelector('.copy-btn');
+            if (copied && button) {
+                button.innerText = 'COPIED!';
+                setTimeout(() => { button.innerText = 'COPY CODE'; }, 2000);
+            }
+            showNotification(copied ? 'COPIED!' : 'COPY FAILED');
         }
 
         let audioPlaying = false;
