@@ -3,6 +3,7 @@ const {
     default: makeWASocket,
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore,
     DisconnectReason,
     Browsers
 } = require('@whiskeysockets/baileys');
@@ -12,15 +13,17 @@ const fs = require('fs');
 const NodeCache = require('node-cache');
 const { Mutex } = require('async-mutex');
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const crypto = require('crypto');
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const publicPath = path.join(__dirname, 'public');
-if (!fs.existsSync(publicPath)) {
-    fs.mkdirSync(publicPath, { recursive: true });
-}
+const registryPath = path.join(__dirname, '..', 'session-registry');
+
+if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
+if (!fs.existsSync(registryPath)) fs.mkdirSync(registryPath, { recursive: true });
 
 const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
 
@@ -172,7 +175,17 @@ const htmlIndex = `<!DOCTYPE html>
 
 fs.writeFileSync(path.join(publicPath, 'index.html'), htmlIndex);
 app.use(express.static(publicPath));
-app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
+
+// Registry Endpoint
+app.get('/session-registry/:id', (req, res) => {
+    const id = req.params.id;
+    const filePath = path.join(registryPath, `${id}.json`);
+    if (fs.existsSync(filePath)) {
+        res.json(JSON.parse(fs.readFileSync(filePath, 'utf-8')));
+    } else {
+        res.status(404).json({ error: 'Session not found' });
+    }
+});
 
 const PORT = process.env.PORT || 8000;
 const sessions = new Map();
@@ -205,17 +218,15 @@ app.post('/pair', async (req, res) => {
         const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
         const startPairing = async () => {
-            console.log(`[SOCKET] Starting ultra-stable session for ${cleanNumber}...`);
             socket = makeWASocket({
                 version,
                 auth: {
                     creds: state.creds,
-                    keys: state.keys // Removed cacheable wrapper for pairing stability
+                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: 'fatal' }),
-                // Official Safari Mac OS Identity
-                browser: Browsers.macOS('Safari'),
+                browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
                 markOnlineOnConnect: true,
                 msgRetryCounterCache,
                 connectTimeoutMs: 120000,
@@ -228,57 +239,72 @@ app.post('/pair', async (req, res) => {
 
             socket.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect } = update;
-                if (connection) {
-                    sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection });
-                }
+                if (connection) sessions.set(sessionKey, { ...sessions.get(sessionKey), status: connection });
 
                 if (connection === 'open') {
                     console.log(`[SUCCESS] ${cleanNumber} Linked!`);
                     const credsData = JSON.parse(fs.readFileSync(path.join(authDir, 'creds.json'), 'utf-8'));
-                    const sessionId = `MOMO-XMD~${Buffer.from(JSON.stringify(credsData)).toString('base64')}`;
-                    sessions.set(sessionKey, { status: 'connected', sessionId });
+                    
+                    // Generate 32-character short ID
+                    const shortId = crypto.randomBytes(12).toString('hex').toUpperCase();
+                    const fullSessionId = `MOMO-XMD~${shortId}`;
+                    
+                    // Save to registry
+                    fs.writeFileSync(path.join(registryPath, `${shortId}.json`), JSON.stringify(credsData));
+                    
+                    sessions.set(sessionKey, { status: 'connected', sessionId: fullSessionId });
                     
                     try {
                         const jid = socket.user.id.split(':')[0] + '@s.whatsapp.net';
+                        // 3-Message Delivery
                         await socket.sendMessage(jid, { text: '⚡Generate session.......' });
                         await new Promise(r => setTimeout(r, 1000));
-                        await socket.sendMessage(jid, { text: sessionId });
+                        await socket.sendMessage(jid, { text: fullSessionId });
                         await new Promise(r => setTimeout(r, 1000));
-                        await socket.sendMessage(jid, { text: `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n> ❑ Powered by MOMO-XMD ❑\n> ❑ owner MOMO47 ❑` });
+                        const msg3 = `╭◆
+│
+│ ◆ OWNER : MOMO47
+│ 
+│ ◆ NUMBER 1 : +255 760 298 574
+│ 
+│ ◆ NUMBER 2 : +255 765 409 584
+│
+╰◆
+
+╭━━❐━⪼
+┇ ★ CHANNEL 1 :
+┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H
+┇
+┇ ★ CHANNEL 2 :
+┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U
+┇
+┇ ★ CHANNEL 3 :
+┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D
+┇
+┇ ★ CHANNEL 4 :
+┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N
+╰━━❑━⪼
+
+> powered by MOMO-XMD
+> owner MOMO47`;
+                        await socket.sendMessage(jid, { text: msg3 });
                     } catch (e) {}
                     
                     setTimeout(() => {
                         try { socket.end(undefined); } catch (e) {}
                         if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
-                    }, 300000);
+                    }, 15000);
                 }
 
                 if (connection === 'close') {
                     const reason = lastDisconnect?.error?.output?.statusCode;
-                    console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason}`);
-                    
-                    if (reason === 403) {
-                        sessions.set(sessionKey, { ...sessions.get(sessionKey), status: 'failed', error: 'Forbidden (403) - IP or Number flagged.' });
-                    }
-
                     if (!isResolved && (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired)) {
-                        console.log(`[RETRY] Auto-reconnecting for ${cleanNumber}...`);
                         setTimeout(() => startPairing(), 3000);
                     }
                 }
             });
 
-            // Heartbeat to keep socket active
-            const heartbeat = setInterval(() => {
-                if (socket && socket.ws && socket.ws.readyState === 1) {
-                    socket.query({ tag: 'iq', attrs: { type: 'get', xmlns: 'w:p', to: '@s.whatsapp.net' }, content: [] }).catch(() => {});
-                } else {
-                    clearInterval(heartbeat);
-                }
-            }, 15000);
-
-            // Wait for socket to stabilize
-            await new Promise(r => setTimeout(r, 12000));
+            await new Promise(r => setTimeout(r, 10000));
             if (!isResolved) {
                 try {
                     let code = await socket.requestPairingCode(cleanNumber);
@@ -287,10 +313,9 @@ app.post('/pair', async (req, res) => {
                         res.json({ success: true, code, sessionKey });
                     }
                 } catch (err) {
-                    console.log(`[CODE-ERR] ${err.message}`);
                     if (!isResolved) {
                         isResolved = true;
-                        res.status(500).json({ success: false, message: 'WhatsApp rejected request. Refresh and try again.' });
+                        res.status(500).json({ success: false, message: 'WhatsApp rejected request.' });
                     }
                 }
             }
@@ -301,14 +326,14 @@ app.post('/pair', async (req, res) => {
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
-                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Refresh and try tena.' });
+                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout' });
             }
-        }, 180000);
+        }, 120000);
 
     } catch (error) {
         if (!isResolved) {
             isResolved = true;
-            if (!res.headersSent) res.status(500).json({ success: false, message: 'Server error' });
+            if (!res.headersSent) res.status(500).json({ success: false });
         }
     } finally {
         release();
