@@ -224,26 +224,33 @@ app.post('/pair', async (req, res) => {
 
     socket.ev.on('creds.update', saveCreds);
 
-    // requestPairingCode must use the same live socket that remains connected;
-    // do not wait an arbitrary 8 seconds while a transient socket can already close.
-    const socketReady = new Promise((resolve, reject) => {
+    // Baileys documents the QR event as the pairing-code readiness trigger.
+    // Waiting only for `connecting` is too early and can produce 401/428 closures.
+    const pairingReady = new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (fn, value) => {
+            if (settled) return;
+            settled = true;
+            socket.ev.off('connection.update', onUpdate);
+            clearTimeout(timer);
+            fn(value);
+        };
         const onUpdate = (update) => {
-            const { connection, lastDisconnect } = update;
-            if (connection === 'connecting' || connection === 'open') {
-                socket.ev.off('connection.update', onUpdate);
-                resolve();
-            } else if (connection === 'close') {
-                socket.ev.off('connection.update', onUpdate);
+            const { qr, connection, lastDisconnect } = update;
+            if (qr && !state.creds.registered) finish(resolve);
+            else if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode || 'unknown';
-                reject(new Error(`Socket closed before pairing code: ${reason}`));
+                finish(reject, new Error(`Socket closed before pairing code: ${reason}`));
             }
         };
+        const timer = setTimeout(() => finish(reject, new Error('Pairing readiness timeout')), 30000);
         socket.ev.on('connection.update', onUpdate);
-        setTimeout(() => {
-            socket.ev.off('connection.update', onUpdate);
-            reject(new Error('Socket readiness timeout'));
-        }, 30000);
     });
+
+    // Prevent this request from being used with an already registered auth state.
+    if (state.creds.registered) {
+        throw new Error('Auth state is already registered; start a fresh pairing request.');
+    }
 
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
@@ -278,7 +285,7 @@ app.post('/pair', async (req, res) => {
     });
 
     try {
-        await socketReady;
+        await pairingReady;
         const code = await socket.requestPairingCode(number);
         console.log(`[CODE] ${number} -> ${code}`);
         res.json({ code });
