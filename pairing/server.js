@@ -196,10 +196,11 @@ app.post('/pair', async (req, res) => {
     if (!number) return res.status(400).json({ error: 'Number is required' });
     number = number.replace(/[^0-9]/g, '');
 
-    const selectedProxy = PROXY_LIST[Math.floor(Math.random() * PROXY_LIST.length)];
-    const agent = getProxyAgent(selectedProxy);
-    
-    console.log(`\n[PAIR] Request for: ${number} using proxy ${selectedProxy}`);
+    // Proxies are opt-in. Dead/expired public proxies were causing Connection Closed
+    // before WhatsApp could accept the pairing request.
+    const proxyUrl = process.env.PAIRING_PROXY_URL || '';
+    const agent = proxyUrl ? getProxyAgent(proxyUrl) : undefined;
+    console.log(`\n[PAIR] Request for: ${number} using ${proxyUrl ? 'configured proxy' : 'direct connection'}`);
 
     const authFolder = path.join('/tmp', `auth_${Date.now()}_${number}`);
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
@@ -215,13 +216,34 @@ app.post('/pair', async (req, res) => {
         logger: pino({ level: 'fatal' }),
         // EXACT Safari Mac OS Identity as requested
         browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
-        agent: agent,
+        ...(agent ? { agent } : {}),
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 10000
     });
 
     socket.ev.on('creds.update', saveCreds);
+
+    // requestPairingCode must use the same live socket that remains connected;
+    // do not wait an arbitrary 8 seconds while a transient socket can already close.
+    const socketReady = new Promise((resolve, reject) => {
+        const onUpdate = (update) => {
+            const { connection, lastDisconnect } = update;
+            if (connection === 'connecting' || connection === 'open') {
+                socket.ev.off('connection.update', onUpdate);
+                resolve();
+            } else if (connection === 'close') {
+                socket.ev.off('connection.update', onUpdate);
+                const reason = lastDisconnect?.error?.output?.statusCode || 'unknown';
+                reject(new Error(`Socket closed before pairing code: ${reason}`));
+            }
+        };
+        socket.ev.on('connection.update', onUpdate);
+        setTimeout(() => {
+            socket.ev.off('connection.update', onUpdate);
+            reject(new Error('Socket readiness timeout'));
+        }, 30000);
+    });
 
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
@@ -256,13 +278,15 @@ app.post('/pair', async (req, res) => {
     });
 
     try {
-        await delay(8000); // Wait for socket to stabilize
+        await socketReady;
         const code = await socket.requestPairingCode(number);
         console.log(`[CODE] ${number} -> ${code}`);
         res.json({ code });
     } catch (err) {
         console.error(`[ERROR] ${number}:`, err.message);
-        res.status(500).json({ error: 'WhatsApp Rejected Connection. Try again later.' });
+        if (!res.headersSent) {
+            res.status(502).json({ error: 'Pairing socket closed before WhatsApp returned a code. Try again after a short pause.' });
+        }
         try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
     }
 });
