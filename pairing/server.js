@@ -24,7 +24,6 @@ if (!fs.existsSync(registryPath)) fs.mkdirSync(registryPath, { recursive: true }
 
 const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
 
-// Serve BGM with proper headers to avoid RangeNotSatisfiableError
 app.get('/bgm.mp3', (req, res) => {
     const bgmPath = path.join(__dirname, 'public', 'bgm.mp3');
     if (fs.existsSync(bgmPath)) {
@@ -126,7 +125,7 @@ app.get('/', (req, res) => {
                 if (data.success && data.code) {
                     resultDiv.innerHTML = \`
                         <p style="color: #00ffcc; font-weight: bold;">Pairing Code Ready!</p>
-                        <div class="code-box" onclick="copyCode('\${data.code}')">\${data.code}</div>
+                        <div class="code-box" id="codeBox" onclick="copyCode('\${data.code}')">\${data.code}</div>
                         <button class="copy-btn" id="copyBtn" onclick="copyCode('\${data.code}')">COPY CODE</button>
                         <p id="status-msg" style="font-size: 12px; color: #88ccff; margin-top: 10px;">Status: code generated</p>
                     \`;
@@ -194,7 +193,6 @@ app.get('/', (req, res) => {
     res.send(htmlIndex);
 });
 
-// Registry Endpoint
 app.get('/session-registry/:id', (req, res) => {
     const id = req.params.id;
     const filePath = path.join(registryPath, `${id}.json`);
@@ -228,6 +226,7 @@ app.post('/pair', async (req, res) => {
     let isResolved = false;
     let socket;
 
+    // Aggressive Cleanup
     if (fs.existsSync(authDir)) {
         try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
     }
@@ -249,12 +248,13 @@ app.post('/pair', async (req, res) => {
                     },
                     printQRInTerminal: false,
                     logger: pino({ level: 'fatal' }),
-                    browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
+                    // Use Native Baileys Browsers format for Safari (Mac OS)
+                    browser: Browsers.macOS('Safari'),
                     markOnlineOnConnect: true,
                     msgRetryCounterCache,
-                    connectTimeoutMs: 120000,
-                    defaultQueryTimeoutMs: 120000,
-                    keepAliveIntervalMs: 20000,
+                    connectTimeoutMs: 60000,
+                    defaultQueryTimeoutMs: 60000,
+                    keepAliveIntervalMs: 15000,
                     agent
                 });
 
@@ -297,18 +297,19 @@ app.post('/pair', async (req, res) => {
                         console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason}`);
                         
                         if (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired) {
-                            // Silently reconnect without generating new code if already generated
-                            console.log(`[RESTART] Silently reconnecting for ${cleanNumber}...`);
+                            console.log(`[RECONNECT] Re-establishing for ${cleanNumber}...`);
                             setTimeout(() => startPairing(), 2000);
                         } else if (reason === DisconnectReason.loggedOut) {
                             sessions.set(sessionKey, { status: 'closed', error: 'Logged out' });
+                        } else if (reason === 401 || reason === 403) {
+                            sessions.set(sessionKey, { status: 'closed', error: 'WhatsApp Rejected Connection (403). Try again later.' });
                         }
                     }
                 });
 
-                // Wait for connection to stabilize before requesting code
                 if (!isResolved) {
-                    await new Promise(r => setTimeout(r, 15000));
+                    // Reduced delay for faster handshake
+                    await new Promise(r => setTimeout(r, 6000));
                     try {
                         let code = await socket.requestPairingCode(cleanNumber);
                         if (code && !isResolved) {
@@ -335,7 +336,7 @@ app.post('/pair', async (req, res) => {
                 isResolved = true;
                 if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Jaribu tena.' });
             }
-        }, 90000);
+        }, 60000);
 
     } catch (error) {
         console.error(`[CRITICAL] ${error.message}`);
@@ -346,7 +347,6 @@ app.post('/pair', async (req, res) => {
     }
 });
 
-// Prevent crashes from unhandled errors
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
 });
