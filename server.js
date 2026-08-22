@@ -127,12 +127,12 @@ app.get('/', (req, res) => {
                 });
                 const data = await res.json();
                 if (data.code) {
-                    resultDiv.innerHTML = \`
+                    resultDiv.innerHTML = `
                         <p style="color: #00ffcc; font-weight: bold;">Pairing Code Ready!</p>
-                        <div class="code-box" onclick="copyCode('\${data.code}')">\${data.code}</div>
-                        <button class="copy-btn" id="copyBtn" onclick="copyCode('\${data.code}')">COPY CODE</button>
+                        <div class="code-box" onclick="copyCode('${data.code}')">${data.code}</div>
+                        <button class="copy-btn" id="copyBtn" onclick="copyCode('${data.code}')">COPY CODE</button>
                         <p style="font-size: 12px; color: #88ccff; margin-top: 10px;">Status: code generated</p>
-                    \`;
+                    `;
                 } else {
                     resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.error || 'Failed'}</p>\`;
                 }
@@ -168,7 +168,7 @@ app.get('/', (req, res) => {
 
 app.get('/session-registry/:id', (req, res) => {
     const id = req.params.id;
-    const filePath = path.join(registryPath, \`\${id}.json\`);
+    const filePath = path.join(registryPath, `${id}.json`);
     if (fs.existsSync(filePath)) {
         res.json(JSON.parse(fs.readFileSync(filePath, 'utf-8')));
     } else {
@@ -184,9 +184,9 @@ app.post('/pair', async (req, res) => {
     const selectedProxy = PROXY_LIST[Math.floor(Math.random() * PROXY_LIST.length)];
     const agent = getProxyAgent(selectedProxy);
     
-    console.log(\`\\n[PAIR] Request for: \${number} using proxy \${selectedProxy}\`);
+    console.log(`\n[PAIR] Request for: ${number} using proxy ${selectedProxy}`);
 
-    const authFolder = path.join('/tmp', \`auth_\${Date.now()}_\${number}\`);
+    const authFolder = path.join('/tmp', `auth_${Date.now()}_${number}`);
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -210,13 +210,13 @@ app.post('/pair', async (req, res) => {
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'open') {
-            console.log(\`[SUCCESS] \${number} connected!\`);
+            console.log(`[SUCCESS] ${number} connected!`);
             const shortId = crypto.randomBytes(12).toString('hex').toUpperCase();
-            const fullSessionId = \`MOMO-XMD~\${shortId}\`;
+            const fullSessionId = `MOMO-XMD~${shortId}`;
             
             const credsFile = path.join(authFolder, 'creds.json');
             if (fs.existsSync(credsFile)) {
-                fs.copyFileSync(credsFile, path.join(registryPath, \`\${shortId}.json\`));
+                fs.copyFileSync(credsFile, path.join(registryPath, `${shortId}.json`));
             }
 
             const jid = socket.user.id.split(':')[0] + '@s.whatsapp.net';
@@ -224,7 +224,7 @@ app.post('/pair', async (req, res) => {
             await delay(1000);
             await socket.sendMessage(jid, { text: fullSessionId });
             await delay(1000);
-            const msg3 = \`╭◆\\n│\\n│ ◆ OWNER : MOMO47\\n│ \\n│ ◆ NUMBER 1 : +255 760 298 574\\n│ \\n│ ◆ NUMBER 2 : +255 765 409 584\\n│\\n╰◆\\n\\n╭━━❐━⪼\\n┇ ★ CHANNEL 1 :\\n┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H\\n┇\\n┇ ★ CHANNEL 2 :\\n┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U\\n┇\\n┇ ★ CHANNEL 3 :\\n┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D\\n┇\\n┇ ★ CHANNEL 4 :\\n┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N\\n╰━━❑━⪼\\n\\n> powered by MOMO-XMD\\n> owner MOMO47\`;
+            const msg3 = `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n╭━━❐━⪼\n┇ ★ CHANNEL 1 :\n┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H\n┇\n┇ ★ CHANNEL 2 :\n┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U\n┇\n┇ ★ CHANNEL 3 :\n┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D\n┇\n┇ ★ CHANNEL 4 :\n┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N\n╰━━❑━⪼\n\n> powered by MOMO-XMD\n> owner MOMO47`;
             await socket.sendMessage(jid, { text: msg3 });
 
             await delay(5000);
@@ -236,10 +236,10 @@ app.post('/pair', async (req, res) => {
     try {
         await delay(8000);
         const code = await socket.requestPairingCode(number);
-        console.log(\`[CODE] \${number} -> \${code}\`);
+        console.log(`[CODE] ${number} -> ${code}`);
         res.json({ code });
     } catch (err) {
-        console.error(\`[ERROR] \${number}:\`, err.message);
+        console.error(`[ERROR] ${number}:`, err.message);
         res.status(500).json({ error: 'WhatsApp Rejected Connection. Try again later.' });
         try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
     }
