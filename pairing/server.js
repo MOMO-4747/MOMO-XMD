@@ -227,7 +227,8 @@ app.post('/pair', async (req, res) => {
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
         // EXACT Safari Mac OS Identity as requested
-        browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
+        // Baileys expects [OS, browser, version]; this produces Safari (Mac OS) in companion_hello.
+        browser: ["Mac OS", "Safari", "17.4.1"],
         ...(agent ? { agent } : {}),
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
