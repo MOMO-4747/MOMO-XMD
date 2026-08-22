@@ -14,6 +14,10 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const { HttpProxyAgent } = require('http-proxy-agent');
 const crypto = require('crypto');
 
+// Keep exactly one live pairing socket per phone number. Repeated requests were
+// leaving stale sockets behind and causing 401/408/428/515 closures.
+const activePairings = new Map();
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -202,6 +206,14 @@ app.post('/pair', async (req, res) => {
     const agent = proxyUrl ? getProxyAgent(proxyUrl) : undefined;
     console.log(`\n[PAIR] Request for: ${number} using ${proxyUrl ? 'configured proxy' : 'direct connection'}`);
 
+    // Never allow a second request for the same number to invalidate the first.
+    const previous = activePairings.get(number);
+    if (previous) {
+        try { previous.socket.end(undefined); } catch (e) {}
+        try { fs.rmSync(previous.authFolder, { recursive: true, force: true }); } catch (e) {}
+        activePairings.delete(number);
+    }
+
     const authFolder = path.join('/tmp', `auth_${Date.now()}_${number}`);
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
@@ -223,6 +235,7 @@ app.post('/pair', async (req, res) => {
     });
 
     socket.ev.on('creds.update', saveCreds);
+    activePairings.set(number, { socket, authFolder });
 
     // Baileys documents the QR event as the pairing-code readiness trigger.
     // Waiting only for `connecting` is too early and can produce 401/428 closures.
@@ -249,7 +262,9 @@ app.post('/pair', async (req, res) => {
 
     // Prevent this request from being used with an already registered auth state.
     if (state.creds.registered) {
-        throw new Error('Auth state is already registered; start a fresh pairing request.');
+        try { socket.end(undefined); } catch (e) {}
+        activePairings.delete(number);
+        return res.status(409).json({ error: 'Auth state is already registered; request a fresh pairing code.' });
     }
 
     socket.ev.on('connection.update', async (update) => {
@@ -277,10 +292,12 @@ app.post('/pair', async (req, res) => {
             await delay(5000);
             try { socket.end(undefined); } catch (e) {}
             try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
+            if (activePairings.get(number)?.socket === socket) activePairings.delete(number);
         }
         if (connection === 'close') {
             const reason = lastDisconnect?.error?.output?.statusCode;
             console.log(`[SOCKET] ${number} closed: ${reason}`);
+            if (activePairings.get(number)?.socket === socket) activePairings.delete(number);
         }
     });
 
@@ -295,6 +312,7 @@ app.post('/pair', async (req, res) => {
             res.status(502).json({ error: 'Pairing socket closed before WhatsApp returned a code. Try again after a short pause.' });
         }
         try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
+        if (activePairings.get(number)?.socket === socket) activePairings.delete(number);
     }
 });
 
