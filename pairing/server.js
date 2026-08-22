@@ -218,7 +218,7 @@ app.post('/pair', async (req, res) => {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
 
-    const socket = makeWASocket({
+    const makePairingSocket = () => makeWASocket({
         version,
         auth: {
             creds: state.creds,
@@ -226,8 +226,7 @@ app.post('/pair', async (req, res) => {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        // EXACT Safari Mac OS Identity as requested
-        // Baileys expects [OS, browser, version]; this produces Safari (Mac OS) in companion_hello.
+        // Baileys expects [OS, browser, version]; this produces Safari (Mac OS).
         browser: ["Mac OS", "Safari", "17.4.1"],
         ...(agent ? { agent } : {}),
         connectTimeoutMs: 60000,
@@ -235,6 +234,9 @@ app.post('/pair', async (req, res) => {
         keepAliveIntervalMs: 10000
     });
 
+    let socket = makePairingSocket();
+    let delivered = false;
+    let restartAttempts = 0;
     socket.ev.on('creds.update', saveCreds);
     activePairings.set(number, { socket, authFolder });
 
@@ -268,9 +270,10 @@ app.post('/pair', async (req, res) => {
         return res.status(409).json({ error: 'Auth state is already registered; request a fresh pairing code.' });
     }
 
-    socket.ev.on('connection.update', async (update) => {
+    const bindConnectionEvents = (boundSocket) => boundSocket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
-        if (connection === 'open') {
+        if (connection === 'open' && !delivered) {
+            delivered = true;
             console.log(`[SUCCESS] ${number} connected!`);
             const shortId = crypto.randomBytes(12).toString('hex').toUpperCase();
             const fullSessionId = `MOMO-XMD~${shortId}`;
@@ -298,9 +301,24 @@ app.post('/pair', async (req, res) => {
         if (connection === 'close') {
             const reason = lastDisconnect?.error?.output?.statusCode;
             console.log(`[SOCKET] ${number} closed: ${reason}`);
-            if (activePairings.get(number)?.socket === socket) activePairings.delete(number);
+            // WhatsApp commonly emits 515 after accepting a pairing request. It means
+            // restart the socket with the now-updated auth state; deleting the socket
+            // here made the phone spin until it reported "Couldn't link device".
+            if (reason === DisconnectReason.restartRequired && !delivered && restartAttempts < 2) {
+                restartAttempts += 1;
+                console.log(`[RESTART] ${number}: reconnecting with saved pairing auth (attempt ${restartAttempts})`);
+                try { boundSocket.end(undefined); } catch (e) {}
+                await delay(1000);
+                socket = makePairingSocket();
+                socket.ev.on('creds.update', saveCreds);
+                activePairings.set(number, { socket, authFolder });
+                bindConnectionEvents(socket);
+                return;
+            }
+            if (activePairings.get(number)?.socket === boundSocket) activePairings.delete(number);
         }
     });
+    bindConnectionEvents(socket);
 
     try {
         await pairingReady;
