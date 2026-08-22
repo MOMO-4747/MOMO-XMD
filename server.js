@@ -246,4 +246,11 @@ app.post('/pair', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => console.log(\`Server started on port \${PORT}\`));
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+
+process.on('uncaughtException', (err) => {
+    console.error('[UNCAUGHT EXCEPTION]:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[UNHANDLED REJECTION]:', reason);
+});
