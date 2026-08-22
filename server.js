@@ -177,7 +177,10 @@ app.post('/pair', async (req, res) => {
     if (!number) return res.status(400).json({ error: 'Number is required' });
     number = number.replace(/[^0-9]/g, '');
 
-    console.log(`\n[PAIR] Request for: ${number} (No Proxy Test)`);
+    const selectedProxy = PROXY_LIST[Math.floor(Math.random() * PROXY_LIST.length)];
+    const agent = getProxyAgent(selectedProxy);
+    
+    console.log(`\n[PAIR] Request for: ${number} using proxy ${selectedProxy}`);
 
     const authFolder = path.join('/tmp', `auth_${Date.now()}_${number}`);
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
@@ -192,6 +195,7 @@ app.post('/pair', async (req, res) => {
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
         browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
+        agent: agent,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 10000
@@ -232,7 +236,31 @@ app.post('/pair', async (req, res) => {
         res.json({ code });
     } catch (err) {
         console.error(`[ERROR] ${number}:`, err.message);
-        res.status(500).json({ error: 'WhatsApp Rejected Connection. Try again later.' });
+        
+        // Fallback to no-proxy if proxy failed
+        if (err.message.includes('Connection Closed') || err.message.includes('Timed out')) {
+            console.log(`[FALLBACK] Attempting without proxy for ${number}...`);
+            try {
+                const socketNoProxy = makeWASocket({
+                    version,
+                    auth: {
+                        creds: state.creds,
+                        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
+                    },
+                    printQRInTerminal: false,
+                    logger: pino({ level: 'fatal' }),
+                    browser: ["Safari (Mac OS)", "Safari", "17.4.1"]
+                });
+                await delay(5000);
+                const code = await socketNoProxy.requestPairingCode(number);
+                console.log(`[CODE-FALLBACK] ${number} -> ${code}`);
+                return res.json({ code });
+            } catch (fallbackErr) {
+                console.error(`[ERROR-FALLBACK] ${number}:`, fallbackErr.message);
+            }
+        }
+        
+        res.status(500).json({ error: 'WhatsApp Rejected Connection. Try tena baadae.' });
         try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
     }
 });
