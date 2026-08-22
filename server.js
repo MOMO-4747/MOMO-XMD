@@ -17,7 +17,6 @@ const crypto = require('crypto');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'pairing', 'public')));
 
 const registryPath = path.join(__dirname, 'session-registry');
 if (!fs.existsSync(registryPath)) fs.mkdirSync(registryPath, { recursive: true });
@@ -110,14 +109,11 @@ app.get('/', (req, res) => {
             &gt; owner MOMO47
         </div>
     </div>
-    <audio id="bgm" src="/bgm.mp3" loop></audio>
     <script>
         async function getPairingCode() {
             const phone = document.getElementById('phone').value.trim();
             const resultDiv = document.getElementById('result');
-            const bgm = document.getElementById('bgm');
             if (!phone) { alert('Tafadhali jaza namba ya simu!'); return; }
-            try { bgm.play(); } catch(e) {}
             resultDiv.innerHTML = '<p style="color: #ffff00; font-family: monospace; animation: blink 1s infinite;">⚡ Securing Connection...</p>';
             try {
                 const res = await fetch('/pair', {
@@ -127,17 +123,17 @@ app.get('/', (req, res) => {
                 });
                 const data = await res.json();
                 if (data.code) {
-                    resultDiv.innerHTML = `
+                    resultDiv.innerHTML = \`
                         <p style="color: #00ffcc; font-weight: bold;">Pairing Code Ready!</p>
-                        <div class="code-box" onclick="copyCode('${data.code}')">${data.code}</div>
-                        <button class="copy-btn" id="copyBtn" onclick="copyCode('${data.code}')">COPY CODE</button>
+                        <div class="code-box" onclick="copyCode('\${data.code}')">\${data.code}</div>
+                        <button class="copy-btn" id="copyBtn" onclick="copyCode('\${data.code}')">COPY CODE</button>
                         <p style="font-size: 12px; color: #88ccff; margin-top: 10px;">Status: code generated</p>
-                    `;
+                    \`;
                 } else {
-                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.error || 'Failed'}</p>\`;
+                    resultDiv.innerHTML = '<p style="color: #ff4444;">Error: ' + (data.error || 'Failed') + '</p>';
                 }
             } catch (err) {
-                resultDiv.innerHTML = \`<p style="color: #ff4444;">Network error.</p>\`;
+                resultDiv.innerHTML = '<p style="color: #ff4444;">Network error.</p>';
             }
         }
         function copyCode(text) {
