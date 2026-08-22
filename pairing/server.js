@@ -94,12 +94,18 @@ const htmlIndex = `<!DOCTYPE html>
             &gt; owner MOMO47
         </div>
     </div>
+    <audio id="bgm" src="/bgm.mp3" loop></audio>
     <script>
         let pollInterval;
         async function getPairingCode() {
             const phone = document.getElementById('phone').value.trim();
             const resultDiv = document.getElementById('result');
+            const bgm = document.getElementById('bgm');
+            
             if (!phone) { alert('Tafadhali jaza namba ya simu!'); return; }
+            
+            try { bgm.play(); } catch(e) {}
+            
             resultDiv.innerHTML = '<p style="color: #ffff00; font-family: monospace; animation: blink 1s infinite;">⚡ Securing Connection...</p>';
             
             try {
@@ -222,16 +228,15 @@ app.post('/pair', async (req, res) => {
     const sessionKey = 'momo_' + Date.now();
     sessions.set(sessionKey, { status: 'starting' });
 
-    // Use /tmp for auth to avoid PM2 restarts if watching
-    let authDir = path.join('/tmp', 'momo_auth_' + Date.now());
+    // Use persistent auth dir per number to handle 515 correctly
+    let authDir = path.join('/tmp', 'momo_auth_' + cleanNumber);
     let isResolved = false;
     let socket;
 
-    const cleanup = () => {
-        if (fs.existsSync(authDir)) {
-            try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
-        }
-    };
+    // Cleanup old auth dir for this number to ensure fresh start
+    if (fs.existsSync(authDir)) {
+        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
+    }
 
     try {
         if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
@@ -242,6 +247,7 @@ app.post('/pair', async (req, res) => {
         const startPairing = async () => {
             const release = await mutex.acquire();
             try {
+                console.log(`[SOCKET] Starting for ${cleanNumber} using Safari Mac OS...`);
                 socket = makeWASocket({
                     version,
                     auth: {
@@ -290,24 +296,24 @@ app.post('/pair', async (req, res) => {
                         }
                         setTimeout(() => {
                             try { socket.end(undefined); } catch (e) {}
-                            cleanup();
                         }, 10000);
                     }
 
                     if (connection === 'close') {
                         const reason = lastDisconnect?.error?.output?.statusCode;
                         console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason}`);
-                        // If it's a transient error and we haven't linked yet, don't restart here, 
-                        // let the requestPairingCode logic handle it or fail.
-                        if (reason === DisconnectReason.loggedOut) {
+                        
+                        if (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired) {
+                            console.log(`[RESTART] Restarting socket for ${cleanNumber}...`);
+                            setTimeout(() => startPairing(), 2000);
+                        } else if (reason === DisconnectReason.loggedOut) {
                             sessions.set(sessionKey, { status: 'closed', error: 'Logged out' });
-                            cleanup();
                         }
                     }
                 });
 
                 // Wait for connection to stabilize
-                await new Promise(r => setTimeout(r, 8000));
+                await new Promise(r => setTimeout(r, 12000));
 
                 if (!isResolved) {
                     try {
@@ -320,7 +326,7 @@ app.post('/pair', async (req, res) => {
                         console.log(`[ERROR] Pairing code failed: ${err.message}`);
                         if (!isResolved) {
                             isResolved = true;
-                            res.status(500).json({ success: false, message: 'WhatsApp rejected request. Try again later.' });
+                            res.status(500).json({ success: false, message: 'WhatsApp rejected request. Try again.' });
                         }
                     }
                 }
@@ -335,9 +341,9 @@ app.post('/pair', async (req, res) => {
         setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
-                if (!res.headersSent) res.status(500).json({ success: false, message: 'Seva imechukua muda mrefu. Jaribu tena.' });
+                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Jaribu tena.' });
             }
-        }, 45000);
+        }, 60000);
 
     } catch (error) {
         console.error(`[CRITICAL] ${error.message}`);
@@ -346,14 +352,6 @@ app.post('/pair', async (req, res) => {
             if (!res.headersSent) res.status(500).json({ success: false, message: 'Hitilafu ya seva.' });
         }
     }
-});
-
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
