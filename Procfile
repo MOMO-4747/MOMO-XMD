@@ -1,1 +1,1 @@
-web: node server.js
+web: cd pairing && node server.js
