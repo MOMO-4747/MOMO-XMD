@@ -17,7 +17,6 @@ const crypto = require('crypto');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// Assets are in pairing/public
 app.use(express.static(path.join(__dirname, 'pairing', 'public')));
 
 const registryPath = path.join(__dirname, 'session-registry');
@@ -25,7 +24,6 @@ if (!fs.existsSync(registryPath)) fs.mkdirSync(registryPath, { recursive: true }
 
 const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
 
-// Webshare Proxy Pool
 const PROXY_LIST = [
     "http://hfhlmfza:mbljtr3cnwzm@31.59.20.176:6754",
     "http://hfhlmfza:mbljtr3cnwzm@31.56.127.193:7684",
@@ -44,17 +42,8 @@ function getProxyAgent(proxyUrl) {
     return proxyUrl.startsWith('https') ? new HttpsProxyAgent(proxyUrl) : new HttpProxyAgent(proxyUrl);
 }
 
-app.get('/bgm.mp3', (req, res) => {
-    const bgmPath = path.join(__dirname, 'pairing', 'public', 'bgm.mp3');
-    if (fs.existsSync(bgmPath)) {
-        res.sendFile(bgmPath);
-    } else {
-        res.status(404).send('Not found');
-    }
-});
-
 app.get('/', (req, res) => {
-    const htmlIndex = `<!DOCTYPE html>
+    res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -127,12 +116,9 @@ app.get('/', (req, res) => {
             const phone = document.getElementById('phone').value.trim();
             const resultDiv = document.getElementById('result');
             const bgm = document.getElementById('bgm');
-            
             if (!phone) { alert('Tafadhali jaza namba ya simu!'); return; }
             try { bgm.play(); } catch(e) {}
-            
             resultDiv.innerHTML = '<p style="color: #ffff00; font-family: monospace; animation: blink 1s infinite;">⚡ Securing Connection...</p>';
-            
             try {
                 const res = await fetch('/pair', {
                     method: 'POST',
@@ -154,7 +140,6 @@ app.get('/', (req, res) => {
                 resultDiv.innerHTML = \`<p style="color: #ff4444;">Network error.</p>\`;
             }
         }
-        
         function copyCode(text) {
             const copyBtn = document.getElementById('copyBtn');
             const textArea = document.createElement("textarea");
@@ -178,13 +163,12 @@ app.get('/', (req, res) => {
         }
     </script>
 </body>
-</html>`;
-    res.send(htmlIndex);
+</html>`);
 });
 
 app.get('/session-registry/:id', (req, res) => {
     const id = req.params.id;
-    const filePath = path.join(registryPath, `${id}.json`);
+    const filePath = path.join(registryPath, \`\${id}.json\`);
     if (fs.existsSync(filePath)) {
         res.json(JSON.parse(fs.readFileSync(filePath, 'utf-8')));
     } else {
@@ -200,9 +184,9 @@ app.post('/pair', async (req, res) => {
     const selectedProxy = PROXY_LIST[Math.floor(Math.random() * PROXY_LIST.length)];
     const agent = getProxyAgent(selectedProxy);
     
-    console.log(`\n[PAIR] Request for: ${number} using proxy ${selectedProxy}`);
+    console.log(\`\\n[PAIR] Request for: \${number} using proxy \${selectedProxy}\`);
 
-    const authFolder = path.join('/tmp', `auth_${Date.now()}_${number}`);
+    const authFolder = path.join('/tmp', \`auth_\${Date.now()}_\${number}\`);
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -214,7 +198,6 @@ app.post('/pair', async (req, res) => {
         },
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
-        // EXACT Safari Mac OS Identity as requested
         browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
         agent: agent,
         connectTimeoutMs: 60000,
@@ -227,46 +210,40 @@ app.post('/pair', async (req, res) => {
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'open') {
-            console.log(`[SUCCESS] ${number} connected!`);
+            console.log(\`[SUCCESS] \${number} connected!\`);
             const shortId = crypto.randomBytes(12).toString('hex').toUpperCase();
-            const fullSessionId = `MOMO-XMD~${shortId}`;
+            const fullSessionId = \`MOMO-XMD~\${shortId}\`;
             
-            // Save to registry
             const credsFile = path.join(authFolder, 'creds.json');
             if (fs.existsSync(credsFile)) {
-                fs.copyFileSync(credsFile, path.join(registryPath, `${shortId}.json`));
+                fs.copyFileSync(credsFile, path.join(registryPath, \`\${shortId}.json\`));
             }
 
-            // 3-Message Delivery
             const jid = socket.user.id.split(':')[0] + '@s.whatsapp.net';
             await socket.sendMessage(jid, { text: '⚡Generate session.......' });
             await delay(1000);
             await socket.sendMessage(jid, { text: fullSessionId });
             await delay(1000);
-            const msg3 = `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n╭━━❐━⪼\n┇ ★ CHANNEL 1 :\n┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H\n┇\n┇ ★ CHANNEL 2 :\n┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U\n┇\n┇ ★ CHANNEL 3 :\n┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D\n┇\n┇ ★ CHANNEL 4 :\n┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N\n╰━━❑━⪼\n\n> powered by MOMO-XMD\n> owner MOMO47`;
+            const msg3 = \`╭◆\\n│\\n│ ◆ OWNER : MOMO47\\n│ \\n│ ◆ NUMBER 1 : +255 760 298 574\\n│ \\n│ ◆ NUMBER 2 : +255 765 409 584\\n│\\n╰◆\\n\\n╭━━❐━⪼\\n┇ ★ CHANNEL 1 :\\n┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H\\n┇\\n┇ ★ CHANNEL 2 :\\n┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U\\n┇\\n┇ ★ CHANNEL 3 :\\n┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D\\n┇\\n┇ ★ CHANNEL 4 :\\n┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N\\n╰━━❑━⪼\\n\\n> powered by MOMO-XMD\\n> owner MOMO47\`;
             await socket.sendMessage(jid, { text: msg3 });
 
             await delay(5000);
             try { socket.end(undefined); } catch (e) {}
             try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
         }
-        if (connection === 'close') {
-            const reason = lastDisconnect?.error?.output?.statusCode;
-            console.log(`[SOCKET] ${number} closed: ${reason}`);
-        }
     });
 
     try {
-        await delay(8000); // Wait for socket to stabilize
+        await delay(8000);
         const code = await socket.requestPairingCode(number);
-        console.log(`[CODE] ${number} -> ${code}`);
+        console.log(\`[CODE] \${number} -> \${code}\`);
         res.json({ code });
     } catch (err) {
-        console.error(`[ERROR] ${number}:`, err.message);
+        console.error(\`[ERROR] \${number}:\`, err.message);
         res.status(500).json({ error: 'WhatsApp Rejected Connection. Try again later.' });
         try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
     }
 });
 
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+app.listen(PORT, () => console.log(\`Server started on port \${PORT}\`));
