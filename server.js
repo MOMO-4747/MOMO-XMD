@@ -177,10 +177,7 @@ app.post('/pair', async (req, res) => {
     if (!number) return res.status(400).json({ error: 'Number is required' });
     number = number.replace(/[^0-9]/g, '');
 
-    const selectedProxy = PROXY_LIST[Math.floor(Math.random() * PROXY_LIST.length)];
-    const agent = getProxyAgent(selectedProxy);
-    
-    console.log(`\n[PAIR] Request for: ${number} using proxy ${selectedProxy}`);
+    console.log(`\n[PAIR] Request for: ${number} (No Proxy Test)`);
 
     const authFolder = path.join('/tmp', `auth_${Date.now()}_${number}`);
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
@@ -195,7 +192,6 @@ app.post('/pair', async (req, res) => {
         printQRInTerminal: false,
         logger: pino({ level: 'fatal' }),
         browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
-        agent: agent,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 10000
