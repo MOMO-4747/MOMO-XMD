@@ -5,14 +5,13 @@ const {
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
     DisconnectReason,
-    Browsers
+    delay
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const path = require('path');
 const fs = require('fs');
-const NodeCache = require('node-cache');
-const { Mutex } = require('async-mutex');
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const { HttpProxyAgent } = require('http-proxy-agent');
 const crypto = require('crypto');
 
 const app = express();
@@ -23,6 +22,25 @@ const registryPath = path.join(__dirname, '..', 'session-registry');
 if (!fs.existsSync(registryPath)) fs.mkdirSync(registryPath, { recursive: true });
 
 const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
+
+// Webshare Proxy Pool
+const PROXY_LIST = [
+    "http://hfhlmfza:mbljtr3cnwzm@31.59.20.176:6754",
+    "http://hfhlmfza:mbljtr3cnwzm@31.56.127.193:7684",
+    "http://hfhlmfza:mbljtr3cnwzm@45.38.107.97:6014",
+    "http://hfhlmfza:mbljtr3cnwzm@198.105.121.200:6462",
+    "http://hfhlmfza:mbljtr3cnwzm@64.137.96.74:6641",
+    "http://hfhlmfza:mbljtr3cnwzm@198.23.243.226:6361",
+    "http://hfhlmfza:mbljtr3cnwzm@38.154.185.97:6370",
+    "http://hfhlmfza:mbljtr3cnwzm@84.247.60.125:6095",
+    "http://hfhlmfza:mbljtr3cnwzm@142.111.67.146:5611",
+    "http://hfhlmfza:mbljtr3cnwzm@191.96.254.138:6185"
+];
+
+function getProxyAgent(proxyUrl) {
+    if (!proxyUrl) return null;
+    return proxyUrl.startsWith('https') ? new HttpsProxyAgent(proxyUrl) : new HttpProxyAgent(proxyUrl);
+}
 
 app.get('/bgm.mp3', (req, res) => {
     const bgmPath = path.join(__dirname, 'public', 'bgm.mp3');
@@ -103,14 +121,12 @@ app.get('/', (req, res) => {
     </div>
     <audio id="bgm" src="/bgm.mp3" loop></audio>
     <script>
-        let pollInterval;
         async function getPairingCode() {
             const phone = document.getElementById('phone').value.trim();
             const resultDiv = document.getElementById('result');
             const bgm = document.getElementById('bgm');
             
             if (!phone) { alert('Tafadhali jaza namba ya simu!'); return; }
-            
             try { bgm.play(); } catch(e) {}
             
             resultDiv.innerHTML = '<p style="color: #ffff00; font-family: monospace; animation: blink 1s infinite;">⚡ Securing Connection...</p>';
@@ -122,16 +138,15 @@ app.get('/', (req, res) => {
                     body: JSON.stringify({ number: phone })
                 });
                 const data = await res.json();
-                if (data.success && data.code) {
+                if (data.code) {
                     resultDiv.innerHTML = \`
                         <p style="color: #00ffcc; font-weight: bold;">Pairing Code Ready!</p>
-                        <div class="code-box" id="codeBox" onclick="copyCode('\${data.code}')">\${data.code}</div>
+                        <div class="code-box" onclick="copyCode('\${data.code}')">\${data.code}</div>
                         <button class="copy-btn" id="copyBtn" onclick="copyCode('\${data.code}')">COPY CODE</button>
-                        <p id="status-msg" style="font-size: 12px; color: #88ccff; margin-top: 10px;">Status: code generated</p>
+                        <p style="font-size: 12px; color: #88ccff; margin-top: 10px;">Status: code generated</p>
                     \`;
-                    pollStatus(data.sessionKey);
                 } else {
-                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.message || 'Failed'}</p>\`;
+                    resultDiv.innerHTML = \`<p style="color: #ff4444;">Error: \${data.error || 'Failed'}</p>\`;
                 }
             } catch (err) {
                 resultDiv.innerHTML = \`<p style="color: #ff4444;">Network error.</p>\`;
@@ -150,42 +165,14 @@ app.get('/', (req, res) => {
             textArea.select();
             try {
                 document.execCommand('copy');
-                showCopied(copyBtn);
+                copyBtn.innerText = 'COPIED!';
+                copyBtn.style.background = '#ffffff';
+                setTimeout(() => {
+                    copyBtn.innerText = 'COPY CODE';
+                    copyBtn.style.background = '#00ffcc';
+                }, 2000);
             } catch (err) {}
             document.body.removeChild(textArea);
-        }
-
-        function showCopied(btn) {
-            if (!btn) return;
-            btn.innerText = 'COPIED!';
-            btn.style.background = '#ffffff';
-            setTimeout(() => {
-                btn.innerText = 'COPY CODE';
-                btn.style.background = '#00ffcc';
-            }, 2000);
-        }
-
-        async function pollStatus(key) {
-            if (pollInterval) clearInterval(pollInterval);
-            pollInterval = setInterval(async () => {
-                try {
-                    const res = await fetch('/session-status/' + key);
-                    const data = await res.json();
-                    const statusMsg = document.getElementById('status-msg');
-                    if (statusMsg) {
-                        if (data.error) {
-                            statusMsg.innerHTML = '<span style="color: #ff4444;">' + data.error + '</span>';
-                            clearInterval(pollInterval);
-                        } else {
-                            statusMsg.innerText = "Status: " + (data.status || 'waiting');
-                        }
-                    }
-                    if (data.status === 'connected') {
-                        document.getElementById('result').innerHTML = '<p style="color: #00ff00; font-weight: bold; font-size: 24px;">✔ LINKED SUCCESSFULLY!</p>';
-                        clearInterval(pollInterval);
-                    }
-                } catch (e) {}
-            }, 3000);
         }
     </script>
 </body>
@@ -203,156 +190,80 @@ app.get('/session-registry/:id', (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 8000;
-const sessions = new Map();
-const mutex = new Mutex();
-const msgRetryCounterCache = new NodeCache();
-const PROXY_URL = process.env.PROXY_URL || null;
-
-app.get('/session-status/:key', (req, res) => {
-    const session = sessions.get(req.params.key);
-    res.json({ status: session?.status || 'waiting', error: session?.error || null });
-});
-
 app.post('/pair', async (req, res) => {
     let { number } = req.body;
-    if (!number) return res.status(400).json({ success: false, message: 'Namba inahitajika' });
-    let cleanNumber = String(number).replace(/[^0-9]/g, '');
+    if (!number) return res.status(400).json({ error: 'Number is required' });
+    number = number.replace(/[^0-9]/g, '');
+
+    const selectedProxy = PROXY_LIST[Math.floor(Math.random() * PROXY_LIST.length)];
+    const agent = getProxyAgent(selectedProxy);
     
-    const sessionKey = 'momo_' + Date.now();
-    sessions.set(sessionKey, { status: 'starting' });
+    console.log(`\n[PAIR] Request for: ${number} using proxy ${selectedProxy}`);
 
-    let authDir = path.join('/tmp', 'momo_auth_' + cleanNumber);
-    let isResolved = false;
-    let socket;
+    const authFolder = path.join('/tmp', `auth_${Date.now()}_${number}`);
+    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+    const { version } = await fetchLatestBaileysVersion();
 
-    // Aggressive Cleanup
-    if (fs.existsSync(authDir)) {
-        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
-    }
+    const socket = makeWASocket({
+        version,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
+        },
+        printQRInTerminal: false,
+        logger: pino({ level: 'fatal' }),
+        // EXACT Safari Mac OS Identity as requested
+        browser: ["Safari (Mac OS)", "Safari", "17.4.1"],
+        agent: agent,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 0,
+        keepAliveIntervalMs: 10000
+    });
+
+    socket.ev.on('creds.update', saveCreds);
+
+    socket.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === 'open') {
+            console.log(`[SUCCESS] ${number} connected!`);
+            const shortId = crypto.randomBytes(12).toString('hex').toUpperCase();
+            const fullSessionId = `MOMO-XMD~${shortId}`;
+            
+            // Save to registry
+            const credsFile = path.join(authFolder, 'creds.json');
+            if (fs.existsSync(credsFile)) {
+                fs.copyFileSync(credsFile, path.join(registryPath, `${shortId}.json`));
+            }
+
+            // 3-Message Delivery
+            const jid = socket.user.id.split(':')[0] + '@s.whatsapp.net';
+            await socket.sendMessage(jid, { text: '⚡Generate session.......' });
+            await delay(1000);
+            await socket.sendMessage(jid, { text: fullSessionId });
+            await delay(1000);
+            const msg3 = `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n╭━━❐━⪼\n┇ ★ CHANNEL 1 :\n┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H\n┇\n┇ ★ CHANNEL 2 :\n┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U\n┇\n┇ ★ CHANNEL 3 :\n┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D\n┇\n┇ ★ CHANNEL 4 :\n┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N\n╰━━❑━⪼\n\n> powered by MOMO-XMD\n> owner MOMO47`;
+            await socket.sendMessage(jid, { text: msg3 });
+
+            await delay(5000);
+            try { socket.end(undefined); } catch (e) {}
+            try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
+        }
+        if (connection === 'close') {
+            const reason = lastDisconnect?.error?.output?.statusCode;
+            console.log(`[SOCKET] ${number} closed: ${reason}`);
+        }
+    });
 
     try {
-        if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
-        const { state, saveCreds } = await useMultiFileAuthState(authDir);
-        const { version } = await fetchLatestBaileysVersion();
-        const agent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
-
-        const startPairing = async () => {
-            const release = await mutex.acquire();
-            try {
-                socket = makeWASocket({
-                    version,
-                    auth: {
-                        creds: state.creds,
-                        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
-                    },
-                    printQRInTerminal: false,
-                    logger: pino({ level: 'fatal' }),
-                    // Use Native Baileys Browsers format for Safari (Mac OS)
-                    browser: Browsers.macOS('Safari'),
-                    markOnlineOnConnect: true,
-                    msgRetryCounterCache,
-                    connectTimeoutMs: 60000,
-                    defaultQueryTimeoutMs: 60000,
-                    keepAliveIntervalMs: 15000,
-                    agent
-                });
-
-                socket.ev.on('creds.update', saveCreds);
-
-                socket.ev.on('connection.update', async (update) => {
-                    const { connection, lastDisconnect } = update;
-                    if (connection) {
-                        const current = sessions.get(sessionKey);
-                        sessions.set(sessionKey, { ...current, status: connection });
-                    }
-
-                    if (connection === 'open') {
-                        console.log(`[SUCCESS] ${cleanNumber} Linked!`);
-                        const credsFile = path.join(authDir, 'creds.json');
-                        if (fs.existsSync(credsFile)) {
-                            const credsData = JSON.parse(fs.readFileSync(credsFile, 'utf-8'));
-                            const shortId = crypto.randomBytes(12).toString('hex').toUpperCase();
-                            const fullSessionId = `MOMO-XMD~${shortId}`;
-                            fs.writeFileSync(path.join(registryPath, `${shortId}.json`), JSON.stringify(credsData));
-                            sessions.set(sessionKey, { status: 'connected', sessionId: fullSessionId });
-                            
-                            try {
-                                const jid = socket.user.id.split(':')[0] + '@s.whatsapp.net';
-                                await socket.sendMessage(jid, { text: '⚡Generate session.......' });
-                                await new Promise(r => setTimeout(r, 1000));
-                                await socket.sendMessage(jid, { text: fullSessionId });
-                                await new Promise(r => setTimeout(r, 1000));
-                                const msg3 = `╭◆\n│\n│ ◆ OWNER : MOMO47\n│ \n│ ◆ NUMBER 1 : +255 760 298 574\n│ \n│ ◆ NUMBER 2 : +255 765 409 584\n│\n╰◆\n\n╭━━❐━⪼\n┇ ★ CHANNEL 1 :\n┇ https://whatsapp.com/channel/0029Vb8AYLf2f3EA8Y4qp63H\n┇\n┇ ★ CHANNEL 2 :\n┇ https://whatsapp.com/channel/0029VbDNET6KmCPShs9dyg1U\n┇\n┇ ★ CHANNEL 3 :\n┇ https://whatsapp.com/channel/0029VbDeRauAjPXFYDvO5e2D\n┇\n┇ ★ CHANNEL 4 :\n┇ https://whatsapp.com/channel/0029VbDYZ7LBVJky0TggGF2N\n╰━━❑━⪼\n\n> powered by MOMO-XMD\n> owner MOMO47`;
-                                await socket.sendMessage(jid, { text: msg3 });
-                            } catch (e) {}
-                        }
-                        setTimeout(() => {
-                            try { socket.end(undefined); } catch (e) {}
-                        }, 10000);
-                    }
-
-                    if (connection === 'close') {
-                        const reason = lastDisconnect?.error?.output?.statusCode;
-                        console.log(`[CLOSE] ${cleanNumber} | Reason: ${reason}`);
-                        
-                        if (reason === 515 || reason === 408 || reason === DisconnectReason.restartRequired) {
-                            console.log(`[RECONNECT] Re-establishing for ${cleanNumber}...`);
-                            setTimeout(() => startPairing(), 2000);
-                        } else if (reason === DisconnectReason.loggedOut) {
-                            sessions.set(sessionKey, { status: 'closed', error: 'Logged out' });
-                        } else if (reason === 401 || reason === 403) {
-                            sessions.set(sessionKey, { status: 'closed', error: 'WhatsApp Rejected Connection (403). Try again later.' });
-                        }
-                    }
-                });
-
-                if (!isResolved) {
-                    // Reduced delay for faster handshake
-                    await new Promise(r => setTimeout(r, 6000));
-                    try {
-                        let code = await socket.requestPairingCode(cleanNumber);
-                        if (code && !isResolved) {
-                            isResolved = true;
-                            res.json({ success: true, code, sessionKey });
-                        }
-                    } catch (err) {
-                        console.log(`[ERROR] Pairing code failed: ${err.message}`);
-                        if (!isResolved) {
-                            isResolved = true;
-                            res.status(500).json({ success: false, message: 'WhatsApp rejected request. Try again.' });
-                        }
-                    }
-                }
-            } finally {
-                release();
-            }
-        };
-
-        await startPairing();
-
-        setTimeout(() => {
-            if (!isResolved) {
-                isResolved = true;
-                if (!res.headersSent) res.status(500).json({ success: false, message: 'Timeout. Jaribu tena.' });
-            }
-        }, 60000);
-
-    } catch (error) {
-        console.error(`[CRITICAL] ${error.message}`);
-        if (!isResolved) {
-            isResolved = true;
-            if (!res.headersSent) res.status(500).json({ success: false, message: 'Hitilafu ya seva.' });
-        }
+        await delay(8000); // Wait for socket to stabilize
+        const code = await socket.requestPairingCode(number);
+        console.log(`[CODE] ${number} -> ${code}`);
+        res.json({ code });
+    } catch (err) {
+        console.error(`[ERROR] ${number}:`, err.message);
+        res.status(500).json({ error: 'WhatsApp Rejected Connection. Try again later.' });
+        try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (e) {}
     }
 });
 
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-app.listen(PORT, () => console.log(`[MOMO-XMD PAIRING] Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
