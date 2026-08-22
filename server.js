@@ -257,6 +257,16 @@ app.post('/pair', async (req, res) => {
                 return res.json({ code });
             } catch (fallbackErr) {
                 console.error(`[ERROR-FALLBACK] ${number}:`, fallbackErr.message);
+                // Second fallback attempt with different timing
+                console.log(`[RETRY-FALLBACK] Final attempt for ${number}...`);
+                try {
+                    await delay(5000);
+                    const code = await socketNoProxy.requestPairingCode(number);
+                    console.log(`[CODE-RETRY] ${number} -> ${code}`);
+                    return res.json({ code });
+                } catch (retryErr) {
+                    console.error(`[ERROR-RETRY] ${number}:`, retryErr.message);
+                }
             }
         }
         
