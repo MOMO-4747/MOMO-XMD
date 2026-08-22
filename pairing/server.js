@@ -26,6 +26,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 const registryPath = path.join(__dirname, '..', 'session-registry');
 if (!fs.existsSync(registryPath)) fs.mkdirSync(registryPath, { recursive: true });
 
+function snapshotAuthState(authFolder) {
+    const files = {};
+    const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            const relative = path.relative(authFolder, full);
+            if (entry.isDirectory()) walk(full);
+            else files[relative] = fs.readFileSync(full).toString('base64');
+        }
+    };
+    walk(authFolder);
+    return { format: 'momo-auth-v1', files };
+}
+
 const SKULL_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663874475539/vlTQsHObcCvXHUGA.jpg";
 
 // Webshare Proxy Pool
@@ -278,10 +292,13 @@ app.post('/pair', async (req, res) => {
             const shortId = crypto.randomBytes(12).toString('hex').toUpperCase();
             const fullSessionId = `MOMO-XMD~${shortId}`;
             
-            // Save to registry
-            const credsFile = path.join(authFolder, 'creds.json');
-            if (fs.existsSync(credsFile)) {
-                fs.copyFileSync(credsFile, path.join(registryPath, `${shortId}.json`));
+            // Save the complete multi-file auth state. Storing creds.json alone
+            // causes Bad MAC errors because Signal session/pre-key files are lost.
+            if (fs.existsSync(authFolder)) {
+                fs.writeFileSync(
+                    path.join(registryPath, `${shortId}.json`),
+                    JSON.stringify(snapshotAuthState(authFolder))
+                );
             }
 
             // 3-Message Delivery
