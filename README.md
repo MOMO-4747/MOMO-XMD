@@ -29,7 +29,7 @@
 
 | **Platform** | **Button** |
 | --- | --- |
-| **Deploy to Heroku** | [![DEPLOY TO HEROKU](https://img.shields.io/badge/DEPLOY_TO_HEROKU-7952B3?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com/deploy?template=https%3A%2F%2Fgithub.com%2FMOMO-4747%2FMOMO-XMD) |
+| **Deploy Bot to Heroku** | [![DEPLOY TO HEROKU](https://img.shields.io/badge/DEPLOY_TO_HEROKU-7952B3?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com/deploy?template=https%3A%2F%2Fgithub.com%2FMOMO-4747%2FMOMO-XMD%26branch=heroku-bot-deploy) |
 | **Render** | [![RENDER](https://img.shields.io/badge/RENDER-0099FF?style=for-the-badge&logo=render&logoColor=white)](https://render.com/deploy?repo=https://github.com/MOMO-4747/MOMO-XMD) |
 
 ---
