@@ -1,1 +1,1 @@
-web: cd pairing && node server.js
+web: node vps-bot-entry.js
